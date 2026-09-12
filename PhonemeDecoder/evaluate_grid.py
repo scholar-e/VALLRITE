@@ -20,6 +20,7 @@ from VisualPhoneme.data import (GridClips, collate_clips, collate_fusion_clips,
 from VisualPhoneme.model import (CompactFusionVisualPhoneme,
                                  CompactGatedFusionVisualPhoneme,
                                  CompactLandmarkPhoneme,
+                                 CompactTongueGatedFusionVisualPhoneme,
                                  CompactVisualPhoneme)
 
 LOGGER = logging.getLogger("phoneme_decoder.evaluate_grid")
@@ -107,15 +108,24 @@ def load_model(checkpoint_path: Path, device: torch.device):
         "coordinates": CompactLandmarkPhoneme,
         "fusion": CompactFusionVisualPhoneme,
         "gated-fusion": CompactGatedFusionVisualPhoneme,
+        "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme,
     }
     arguments = {"classes": len(PHONES) + 1}
-    if architecture in {"coordinates", "fusion", "gated-fusion"}:
+    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"}:
         arguments.update(
             landmark_points=int(checkpoint["landmark_points"]),
             coordinate_dimensions=int(checkpoint.get("coordinate_dimensions", 2)),
         )
-    if architecture in {"coordinates", "gated-fusion"}:
+    if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion"}:
         arguments["landmark_bottleneck"] = checkpoint.get("landmark_bottleneck")
+    if architecture in {"gated-fusion", "tongue-gated-fusion"}:
+        arguments["image_gate_probability"] = checkpoint.get(
+            "image_gate_initial_probability", 0.002472623
+        )
+    if architecture == "tongue-gated-fusion":
+        arguments["inner_mouth_gate_probability"] = checkpoint.get(
+            "inner_mouth_gate_initial_probability", 0.05
+        )
     model = classes[architecture](**arguments).to(device)
     model.load_state_dict(checkpoint["model"])
     model.eval()
@@ -150,8 +160,10 @@ def main() -> None:
     device_name = "cuda" if args.device == "auto" and torch.cuda.is_available() else args.device
     device = torch.device("cpu" if device_name == "auto" else device_name)
     checkpoint, architecture, model = load_model(args.checkpoint, device)
-    include_video = architecture in {"image", "fusion", "gated-fusion"}
-    include_landmarks = architecture in {"coordinates", "fusion", "gated-fusion"}
+    include_video = architecture in {"image", "fusion", "gated-fusion",
+                                     "tongue-gated-fusion"}
+    include_landmarks = architecture in {"coordinates", "fusion", "gated-fusion",
+                                         "tongue-gated-fusion"}
     dataset = GridClips(
         args.data_root, args.split, int(checkpoint["image_size"]), checkpoint["crop"],
         args.limit, False, include_landmarks, include_video, False,
@@ -159,7 +171,8 @@ def main() -> None:
         checkpoint.get("coordinate_features", "position"),
     )
     collators = {"image": collate_clips, "coordinates": collate_landmark_clips,
-                 "fusion": collate_fusion_clips, "gated-fusion": collate_fusion_clips}
+                 "fusion": collate_fusion_clips, "gated-fusion": collate_fusion_clips,
+                 "tongue-gated-fusion": collate_fusion_clips}
     loader = DataLoader(
         dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers,
         collate_fn=collators[architecture], pin_memory=device.type == "cuda",
@@ -180,7 +193,7 @@ def main() -> None:
                 device, architecture, args.split, len(dataset), args.beam_width, args.nbest)
     with output_path.open("w", buffering=1) as output, torch.inference_mode():
         for batch_number, batch in enumerate(loader, 1):
-            if architecture in {"fusion", "gated-fusion"}:
+            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
                 video, landmarks, mask, _, lengths, _, clip_ids = batch
                 logits = model(video.to(device, non_blocking=True),
                                landmarks.to(device, non_blocking=True),

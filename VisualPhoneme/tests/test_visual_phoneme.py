@@ -12,6 +12,7 @@ from VisualPhoneme.data import (GridClips, ctc_prefix_beam_search,
 from VisualPhoneme.model import (CompactFusionVisualPhoneme,
                                        CompactGatedFusionVisualPhoneme,
                                        CompactLandmarkPhoneme,
+                                       CompactTongueGatedFusionVisualPhoneme,
                                        CompactVisualPhoneme)
 from VisualPhoneme.train import edit_totals
 
@@ -55,6 +56,27 @@ class VisualPhonemeTests(unittest.TestCase):
                        mask.repeat(2, 1))
         self.assertEqual(output.shape, (6, 2, 40))
         self.assertLess(model.image_gate, 0.05)
+
+    def test_inner_mouth_branch_is_observability_gated(self):
+        model = CompactTongueGatedFusionVisualPhoneme(
+            coordinate_dimensions=10, image_gate_probability=0.05,
+            inner_mouth_gate_probability=0.05,
+        )
+        video = torch.zeros(2, 6, 1, 64, 64)
+        landmarks = torch.zeros(2, 6, 41, 10)
+        landmarks[:, :, 0, 0] = -0.5
+        landmarks[:, :, 1, 0] = 0.5
+        landmarks[1, :, 2, 1] = -0.1
+        landmarks[1, :, 3, 1] = 0.1
+        mask = torch.ones(2, 6, dtype=torch.bool)
+        observability = model.oral_observability(landmarks, mask)
+        self.assertTrue(torch.equal(observability[0], torch.zeros(6)))
+        self.assertTrue(torch.all(observability[1] > 0))
+        self.assertEqual(model.inner_mouth_crop(video).shape, (2, 6, 1, 32, 40))
+        output = model(video, landmarks, mask)
+        self.assertEqual(output.shape, (6, 2, 40))
+        self.assertTrue(torch.isfinite(output).all())
+        self.assertLess(model.parameter_count, 350_000)
 
     def test_bigram_model_is_smoothed(self):
         transitions = fit_bigram_log_probs([[1, 2], [1, 2], [2, 1]], 3)

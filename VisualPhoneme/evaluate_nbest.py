@@ -19,7 +19,8 @@ from VisualPhoneme.data import (
 )
 from VisualPhoneme.model import (
     CompactFusionVisualPhoneme, CompactGatedFusionVisualPhoneme,
-    CompactLandmarkPhoneme, CompactVisualPhoneme,
+    CompactLandmarkPhoneme, CompactTongueGatedFusionVisualPhoneme,
+    CompactVisualPhoneme,
 )
 from VisualPhoneme.train import edit_totals
 
@@ -47,13 +48,22 @@ def load_model(checkpoint: dict, device: torch.device):
     architecture = checkpoint.get("architecture", "image")
     classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
                "fusion": CompactFusionVisualPhoneme,
-               "gated-fusion": CompactGatedFusionVisualPhoneme}
+               "gated-fusion": CompactGatedFusionVisualPhoneme,
+               "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme}
     arguments = {"classes": len(PHONEMES) + 1}
     if architecture != "image":
         arguments.update({"landmark_points": int(checkpoint["landmark_points"]),
                           "coordinate_dimensions": int(checkpoint.get("coordinate_dimensions", 2))})
-    if architecture in {"coordinates", "gated-fusion"}:
+    if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion"}:
         arguments["landmark_bottleneck"] = checkpoint.get("landmark_bottleneck")
+    if architecture in {"gated-fusion", "tongue-gated-fusion"}:
+        arguments["image_gate_probability"] = checkpoint.get(
+            "image_gate_initial_probability", 0.002472623
+        )
+    if architecture == "tongue-gated-fusion":
+        arguments["inner_mouth_gate_probability"] = checkpoint.get(
+            "inner_mouth_gate_initial_probability", 0.05
+        )
     model = classes[architecture](**arguments).to(device)
     model.load_state_dict(checkpoint["model"])
     model.eval()
@@ -108,14 +118,16 @@ def main() -> None:
             checkpoint.get("coordinate_dimensions", 2)):
         raise ValueError("checkpoint coordinate dimensions are inconsistent")
     include_landmarks = architecture != "image"
-    include_video = architecture in {"image", "fusion", "gated-fusion"}
+    include_video = architecture in {"image", "fusion", "gated-fusion",
+                                     "tongue-gated-fusion"}
     validation = GridClips(
         args.data_root, "validation", int(checkpoint["image_size"]), checkpoint["crop"],
         None, False, include_landmarks, include_video, False, coordinate_mode,
         args.frame_cache_dir, coordinate_features,
     )
     collate = {"image": collate_clips, "coordinates": collate_landmark_clips,
-               "fusion": collate_fusion_clips, "gated-fusion": collate_fusion_clips}
+               "fusion": collate_fusion_clips, "gated-fusion": collate_fusion_clips,
+               "tongue-gated-fusion": collate_fusion_clips}
     loader = DataLoader(validation, batch_size=args.batch_size, num_workers=args.workers,
                         collate_fn=collate[architecture], pin_memory=device.type == "cuda",
                         persistent_workers=args.workers > 0)
@@ -124,7 +136,7 @@ def main() -> None:
     started = time.perf_counter()
     with torch.inference_mode():
         for batch_index, batch in enumerate(loader, 1):
-            if architecture in {"fusion", "gated-fusion"}:
+            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
                 video, landmarks, mask, targets, lengths, target_lengths, clip_ids = batch
                 logits = model(video.to(device), landmarks.to(device), mask.to(device))
             elif architecture == "coordinates":

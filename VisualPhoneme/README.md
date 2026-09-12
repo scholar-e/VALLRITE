@@ -162,15 +162,32 @@ insertions, per-speaker PER, prediction length, and runtime. Validation speakers
 decoder are frozen, then evaluate them once. Report the image-only condition,
 coordinate-only condition, and fusion condition with identical preprocessing.
 
-### Tongue-specific extension
+### Observable inner-mouth extension
 
-Use inner-lip coordinates to rectify a small inner-mouth crop, then apply a
-separate CNN that predicts a tongue-visibility score and a compact tongue
-embedding. Gate the embedding by visibility before fusion so hidden tongue
-position is not invented. Supervise this branch with manually reviewed tongue
-masks or keypoints; phoneme identity alone is not a valid tongue-location label.
-Evaluate it first on visibly relevant events such as `TH`, `DH`, and some `L`
-frames, while allowing an explicit unobservable state.
+`--architecture tongue-gated-fusion` adds a separate CNN over the central
+inner-mouth crop. Its residual is multiplied by an observability value derived
+from tracked lip aperture and is zero for closed or untracked mouths. This lets
+the model use visible tongue and teeth pixels without claiming to infer hidden
+tongue position. The fixed crop is an initial GRID-camera implementation; a
+landmark-rectified crop is still preferable for unconstrained video.
+
+`--initialize-image-checkpoint` can initialize the full-mouth and inner-mouth
+encoders from an image-only model. `--freeze-coordinate-epochs 3` first trains
+the visual residuals against the fixed coordinate recognizer, then jointly
+fine-tunes all paths. Gate initialization is explicit and checkpointed.
+
+The initial run did not improve validation: the image-pretrained full-mouth
+model reached 36.70% oracle PER@5, and the inner-mouth model reached 37.41%,
+versus 36.35–36.38% for the coordinate-dominant gated baseline. Both visual
+gates stayed near 4.9%, proving that the branches were active rather than
+collapsed. This is evidence that phoneme CTC supervision alone is insufficient
+for a tongue specialization, not evidence that tongue pixels lack value.
+
+`AudioPhonemeLabeler.tongue_review` exports candidate `TH`, `DH`, and `L`
+intervals with `tongue_visibility: null` and `admit_to_training: false` for
+manual review. Only reviewed visibility/mask or keypoint labels may supervise a
+tongue-specific auxiliary objective; phoneme identity is not a tongue-location
+label.
 
 ### Data expansion decision
 
@@ -200,6 +217,20 @@ From the VALLRITE repository root:
   --data-root datasets/grid-pilot \
   --output-dir checkpoints/visual-phoneme-mouth \
   --max-minutes 30
+```
+
+Run the image-pretrained, aperture-gated inner-mouth ablation:
+
+```bash
+.venv-vpa-gpu/bin/python -m VisualPhoneme.train \
+  --architecture tongue-gated-fusion --coordinate-mode clip-centered \
+  --coordinate-features motion --landmark-bottleneck 32 \
+  --initialize-coordinate-checkpoint path/to/coordinate-best.pt \
+  --initialize-image-checkpoint path/to/image-best.pt \
+  --freeze-coordinate-epochs 3 --image-gate-initial-probability 0.05 \
+  --inner-mouth-gate-initial-probability 0.05 \
+  --top-n 5 --beam-width 16 --selection-metric oracle-per-at-n \
+  --output-dir checkpoints/ablations/tongue-gated --max-minutes 30
 ```
 
 Train and select the centered-coordinate model using Top-5 sequence scoring:

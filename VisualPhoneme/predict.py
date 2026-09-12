@@ -16,6 +16,7 @@ from VisualPhoneme.data import (CROPS, PHONEMES, ctc_prefix_beam_search,
 from VisualPhoneme.model import (CompactFusionVisualPhoneme,
                                        CompactGatedFusionVisualPhoneme,
                                        CompactLandmarkPhoneme,
+                                       CompactTongueGatedFusionVisualPhoneme,
                                        CompactVisualPhoneme)
 
 LOGGER = logging.getLogger("visual_phoneme.predict")
@@ -73,25 +74,35 @@ def main() -> None:
         raise ValueError("checkpoint phoneme vocabulary does not match this code")
     crop_name = checkpoint["crop"]
     architecture = checkpoint.get("architecture", "image")
-    if architecture in {"coordinates", "fusion", "gated-fusion"} and (
+    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"} and (
             args.landmarks_npz is None or not args.landmarks_npz.is_file()):
         parser.error("a coordinate checkpoint requires an existing --landmarks-npz cache")
     model_classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
                      "fusion": CompactFusionVisualPhoneme,
-                     "gated-fusion": CompactGatedFusionVisualPhoneme}
+                     "gated-fusion": CompactGatedFusionVisualPhoneme,
+                     "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme}
     model_args = {"classes": len(phones) + 1}
-    if architecture in {"coordinates", "fusion", "gated-fusion"}:
+    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"}:
         model_args["landmark_points"] = int(checkpoint["landmark_points"])
         model_args["coordinate_dimensions"] = int(checkpoint.get("coordinate_dimensions", 2))
-    if architecture in {"coordinates", "gated-fusion"}:
+    if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion"}:
         model_args["landmark_bottleneck"] = checkpoint.get("landmark_bottleneck")
+    if architecture in {"gated-fusion", "tongue-gated-fusion"}:
+        model_args["image_gate_probability"] = checkpoint.get(
+            "image_gate_initial_probability", 0.002472623
+        )
+    if architecture == "tongue-gated-fusion":
+        model_args["inner_mouth_gate_probability"] = checkpoint.get(
+            "inner_mouth_gate_initial_probability", 0.05
+        )
     model = model_classes[architecture](**model_args).to(device)
     model.load_state_dict(checkpoint["model"])
     model.eval()
     video = (decode_video(args.video, CROPS[crop_name], int(checkpoint["image_size"]))
-             if architecture in {"image", "fusion", "gated-fusion"} else None)
+             if architecture in {"image", "fusion", "gated-fusion",
+                                 "tongue-gated-fusion"} else None)
     landmarks = landmark_mask = None
-    if architecture in {"coordinates", "fusion", "gated-fusion"}:
+    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"}:
         with np.load(args.landmarks_npz) as cached:
             landmarks = torch.from_numpy(cached["coordinates"].astype(np.float32))
         frames = min(len(video), len(landmarks)) if video is not None else len(landmarks)
@@ -106,7 +117,7 @@ def main() -> None:
         landmarks, landmark_mask = transform_landmarks(
             landmarks, coordinate_mode, coordinate_features)
     with torch.inference_mode():
-        if architecture in {"fusion", "gated-fusion"}:
+        if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
             logits = model(video.unsqueeze(0).to(device), landmarks.unsqueeze(0).to(device),
                            landmark_mask.unsqueeze(0).to(device))
         elif architecture == "coordinates":

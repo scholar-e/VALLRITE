@@ -5,6 +5,12 @@ import torch
 from torch import nn
 
 
+def probability_logit(probability: float) -> float:
+    if not 0 < probability < 1:
+        raise ValueError("gate probability must be between zero and one")
+    return float(torch.logit(torch.tensor(probability)))
+
+
 class ConvBlock(nn.Sequential):
     def __init__(self, input_channels: int, output_channels: int):
         super().__init__(
@@ -156,7 +162,8 @@ class CompactGatedFusionVisualPhoneme(nn.Module):
     """Coordinate-first fusion with a conservatively initialized image residual."""
 
     def __init__(self, classes: int = 40, width: int = 96, landmark_points: int = 41,
-                 coordinate_dimensions: int = 2, landmark_bottleneck: int | None = 32):
+                 coordinate_dimensions: int = 2, landmark_bottleneck: int | None = 32,
+                 image_gate_probability: float = 0.002472623):
         super().__init__()
         self.landmark_points = landmark_points
         self.coordinate_dimensions = coordinate_dimensions
@@ -165,7 +172,9 @@ class CompactGatedFusionVisualPhoneme(nn.Module):
                                                  width, landmark_bottleneck)
         self.image_projection = nn.Sequential(nn.Linear(width, width), nn.LayerNorm(width),
                                               nn.SiLU(inplace=True))
-        self.image_gate_logit = nn.Parameter(torch.tensor(-6.0))
+        self.image_gate_logit = nn.Parameter(
+            torch.tensor(probability_logit(image_gate_probability))
+        )
         self.temporal = temporal_encoder(width)
         self.classifier = nn.Linear(width, classes)
 
@@ -196,3 +205,81 @@ class CompactGatedFusionVisualPhoneme(nn.Module):
     @property
     def parameter_count(self) -> int:
         return sum(parameter.numel() for parameter in self.parameters())
+
+
+class CompactTongueGatedFusionVisualPhoneme(CompactGatedFusionVisualPhoneme):
+    """Add an observability-gated inner-mouth residual to coordinate-first fusion.
+
+    The branch can use visible tongue/teeth pixels, but does not claim to infer a
+    hidden tongue position. Lip aperture gates the residual to zero when the oral
+    cavity is not visually exposed.
+    """
+
+    def __init__(self, classes: int = 40, width: int = 96, landmark_points: int = 41,
+                 coordinate_dimensions: int = 2, landmark_bottleneck: int | None = 32,
+                 image_gate_probability: float = 0.05,
+                 inner_mouth_gate_probability: float = 0.05):
+        super().__init__(classes, width, landmark_points, coordinate_dimensions,
+                         landmark_bottleneck, image_gate_probability)
+        self.inner_mouth_encoder = frame_encoder(width)
+        self.inner_mouth_projection = nn.Sequential(
+            nn.Linear(width, width), nn.LayerNorm(width), nn.SiLU(inplace=True)
+        )
+        self.inner_mouth_gate_logit = nn.Parameter(
+            torch.tensor(probability_logit(inner_mouth_gate_probability))
+        )
+
+    @staticmethod
+    def oral_observability(landmarks: torch.Tensor,
+                           landmark_mask: torch.Tensor) -> torch.Tensor:
+        # Selected MediaPipe order starts 61, 291, 13, 14. The first two
+        # feature channels always retain position, including motion mode.
+        mouth_width = torch.linalg.vector_norm(
+            landmarks[:, :, 0, :2] - landmarks[:, :, 1, :2], dim=-1
+        )
+        aperture = torch.linalg.vector_norm(
+            landmarks[:, :, 2, :2] - landmarks[:, :, 3, :2], dim=-1
+        )
+        ratio = aperture / mouth_width.clamp_min(1e-4)
+        # Soft transition: closed/occluded mouths contribute no inner-mouth
+        # evidence; clearly open mouths reach full observability.
+        return ((ratio - 0.015) / 0.16).clamp(0, 1) * landmark_mask.to(ratio.dtype)
+
+    @staticmethod
+    def inner_mouth_crop(video: torch.Tensor) -> torch.Tensor:
+        height, width = video.shape[-2:]
+        top, bottom = round(0.28 * height), round(0.78 * height)
+        left, right = round(0.18 * width), round(0.82 * width)
+        return video[..., top:bottom, left:right]
+
+    def forward(self, video: torch.Tensor, landmarks: torch.Tensor,
+                landmark_mask: torch.Tensor) -> torch.Tensor:
+        if video.ndim != 5 or video.shape[2] != 1:
+            raise ValueError("video must have shape [batch,time,1,height,width]")
+        expected = (self.landmark_points, self.coordinate_dimensions)
+        if landmarks.shape[:2] != video.shape[:2] or landmarks.shape[2:] != expected:
+            raise ValueError(f"landmarks must have trailing shape {expected}")
+        if landmark_mask.shape != video.shape[:2]:
+            raise ValueError("landmark_mask must have shape [batch,time]")
+        batch, steps, channels, height, width = video.shape
+        images = self.frame_encoder(video.reshape(batch * steps, channels, height, width)).flatten(1)
+        images = self.image_projection(images)
+        visibility = landmark_mask.reshape(batch * steps, 1).to(landmarks.dtype)
+        coordinates = torch.nan_to_num(landmarks).reshape(batch * steps, -1)
+        geometry = self.landmark_encoder(torch.cat((coordinates, visibility), dim=1)) * visibility
+
+        crop = self.inner_mouth_crop(video)
+        crop_height, crop_width = crop.shape[-2:]
+        inner = self.inner_mouth_encoder(
+            crop.reshape(batch * steps, channels, crop_height, crop_width)
+        ).flatten(1)
+        inner = self.inner_mouth_projection(inner)
+        observable = self.oral_observability(landmarks, landmark_mask).reshape(-1, 1)
+        encoded = (geometry + self.image_gate_logit.sigmoid() * images
+                   + self.inner_mouth_gate_logit.sigmoid() * observable * inner)
+        encoded = encoded.reshape(batch, steps, -1).transpose(1, 2)
+        return self.classifier(self.temporal(encoded).transpose(1, 2)).transpose(0, 1)
+
+    @property
+    def inner_mouth_gate(self) -> float:
+        return float(self.inner_mouth_gate_logit.detach().sigmoid())

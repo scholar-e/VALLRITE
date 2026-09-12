@@ -122,6 +122,27 @@ pixel-based correction rather than a takeover by the image branch. A weight of
 seed; exact whole-sequence recall is still low, and the locked speaker test must
 wait until model and decoder choices are frozen.
 
+## Image pretraining and inner-mouth ablation
+
+Two matched seed-20260912 runs initialized the coordinate path from the selected
+motion checkpoint and the image encoders from the no-reflection image baseline.
+The coordinate path was frozen for three warm-up epochs. Both runs used batch
+64, the same regularization, bigram weight 0.25, and the same 2,000 validation
+clips. Test speakers remained locked.
+
+| Condition | Parameters | Selected epoch | Greedy PER | Oracle PER@5 | Exact Top-5 | Learned gates |
+|---|---:|---:|---:|---:|---:|---|
+| Prior coordinate-dominant gated run | 149,209 | 2 | 43.18% | **36.35%** | 0.75% | image 0.25% |
+| Image-pretrained staged fusion | 149,209 | 9 | 43.43% | 36.70% | 0.65% | image 4.88% |
+| Aperture-gated inner-mouth fusion | 237,610 | 9 | 44.31% | 37.41% | 0.70% | image 4.91%, inner mouth 4.86% |
+
+The interventions prevented image-gate collapse but did not improve held-out
+speaker accuracy. The inner-mouth condition is therefore retained as a negative
+ablation and not promoted as the default. Its crop can consume visible tongue
+pixels only when lip aperture makes the oral cavity observable; it does not
+estimate hidden tongue position. A future tongue-specific loss requires
+separately reviewed visibility, mask, or keypoint labels.
+
 Complete local artifacts are ignored by Git at
 `checkpoints/visual-phoneme-fusion/`: `best.pt`, `metrics.json`, and `train.log`.
 The selected fusion checkpoint was saved at epoch 20. Earlier checkpoints remain

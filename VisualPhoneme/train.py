@@ -23,6 +23,7 @@ from VisualPhoneme.data import (GridClips, PHONEMES, collate_clips,
 from VisualPhoneme.model import (CompactFusionVisualPhoneme,
                                  CompactGatedFusionVisualPhoneme,
                                  CompactLandmarkPhoneme,
+                                 CompactTongueGatedFusionVisualPhoneme,
                                  CompactVisualPhoneme)
 LOGGER = logging.getLogger("visual_phoneme")
 
@@ -65,14 +66,18 @@ def edit_totals(reference: list[int], hypothesis: list[int]) -> tuple[int, int]:
 def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, deadline=None,
               top_n=1, beam_width=1, beam_token_top_k=None,
               transition_log_probs=None, lm_weight=0.0,
-              image_modality_dropout=0.0, coordinate_modality_dropout=0.0):
+              image_modality_dropout=0.0, coordinate_modality_dropout=0.0,
+              freeze_coordinate_path=False):
     training = optimizer is not None
     model.train(training)
+    if training and freeze_coordinate_path:
+        for name in ("landmark_encoder", "temporal", "classifier"):
+            getattr(model, name).eval()
     total_loss = total_errors = total_phones = clips = 0
     oracle_errors = exact_hits = 0
     started = time.perf_counter()
     for step, batch in enumerate(loader, 1):
-        if architecture in {"fusion", "gated-fusion"}:
+        if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
             video, landmarks, landmark_mask, targets, lengths, target_lengths, _ = batch
             landmarks = landmarks.to(device, non_blocking=True)
             landmark_mask = landmark_mask.to(device, non_blocking=True)
@@ -86,7 +91,7 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
             video, targets, lengths, target_lengths, _ = batch
             video = video.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
-        if training and architecture in {"fusion", "gated-fusion"}:
+        if training and architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
             if image_modality_dropout:
                 dropped = torch.rand(len(video), device=device) < image_modality_dropout
                 video[dropped] = 0
@@ -97,7 +102,7 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
         if training:
             optimizer.zero_grad(set_to_none=True)
         with torch.set_grad_enabled(training):
-            if architecture in {"fusion", "gated-fusion"}:
+            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
                 logits = model(video, landmarks, landmark_mask)
             elif architecture == "coordinates":
                 logits = model(landmarks, landmark_mask)
@@ -171,7 +176,7 @@ def main() -> None:
     parser.add_argument("--landmark-fusion", action="store_true",
                         help=argparse.SUPPRESS)
     parser.add_argument("--architecture", choices=("image", "coordinates", "fusion",
-                                                    "gated-fusion"),
+                                                    "gated-fusion", "tongue-gated-fusion"),
                         default="image", help="input modality used by this ablation")
     parser.add_argument("--horizontal-flip", action=argparse.BooleanOptionalAction, default=None,
                         help="randomly reflect training images (default: image model only)")
@@ -190,6 +195,13 @@ def main() -> None:
     parser.add_argument("--coordinate-modality-dropout", type=float, default=0.0)
     parser.add_argument("--initialize-coordinate-checkpoint", type=Path,
                         help="initialize a gated fusion model's shared coordinate path")
+    parser.add_argument("--initialize-image-checkpoint", type=Path,
+                        help="initialize gated fusion image encoders from an image model")
+    parser.add_argument("--freeze-coordinate-epochs", type=int, default=0,
+                        help="train image residuals alone for the first N epochs")
+    parser.add_argument("--image-gate-initial-probability", type=float,
+                        default=0.002472623)
+    parser.add_argument("--inner-mouth-gate-initial-probability", type=float, default=0.05)
     parser.add_argument("--weight-decay", type=float, default=1e-3)
     parser.add_argument("--frame-cache-dir", type=Path,
                         help="optional persistent cache of decoded uint8 model input frames")
@@ -217,7 +229,10 @@ def main() -> None:
                      args.image_modality_dropout, args.coordinate_modality_dropout)
     if (args.landmark_jitter < 0 or any(not 0 <= value < 1 for value in probabilities)
             or args.max_frame_span < 1 or args.landmark_bottleneck < 0
-            or args.weight_decay < 0 or args.lm_weight < 0 or args.lm_smoothing <= 0):
+            or args.weight_decay < 0 or args.lm_weight < 0 or args.lm_smoothing <= 0
+            or args.freeze_coordinate_epochs < 0
+            or not 0 < args.image_gate_initial_probability < 1
+            or not 0 < args.inner_mouth_gate_initial_probability < 1):
         parser.error("invalid regularization, bottleneck, weight-decay, or LM setting")
 
     if args.landmark_fusion:
@@ -235,8 +250,12 @@ def main() -> None:
     deadline = time.monotonic() + args.max_minutes * 60 if args.max_minutes is not None else None
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    include_landmarks = args.architecture in {"coordinates", "fusion", "gated-fusion"}
-    include_video = args.architecture in {"image", "fusion", "gated-fusion"}
+    include_landmarks = args.architecture in {
+        "coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"
+    }
+    include_video = args.architecture in {
+        "image", "fusion", "gated-fusion", "tongue-gated-fusion"
+    }
     train = GridClips(args.data_root, "train", args.image_size, args.crop, args.train_limit,
                       True, include_landmarks, include_video, args.horizontal_flip,
                       args.coordinate_mode, args.frame_cache_dir, args.coordinate_features,
@@ -247,7 +266,8 @@ def main() -> None:
                            args.coordinate_mode, args.frame_cache_dir, args.coordinate_features)
     collate_functions = {"image": collate_clips, "coordinates": collate_landmark_clips,
                          "fusion": collate_fusion_clips,
-                         "gated-fusion": collate_fusion_clips}
+                         "gated-fusion": collate_fusion_clips,
+                         "tongue-gated-fusion": collate_fusion_clips}
     loader_args = {"batch_size": args.batch_size, "num_workers": args.workers,
                    "collate_fn": collate_functions[args.architecture],
                    "pin_memory": device.type == "cuda",
@@ -256,17 +276,23 @@ def main() -> None:
     validation_loader = DataLoader(validation, shuffle=False, **loader_args)
     model_classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
                      "fusion": CompactFusionVisualPhoneme,
-                     "gated-fusion": CompactGatedFusionVisualPhoneme}
+                     "gated-fusion": CompactGatedFusionVisualPhoneme,
+                     "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme}
     model_class = model_classes[args.architecture]
     model_args = {"classes": len(PHONEMES) + 1}
     if include_landmarks:
         model_args["coordinate_dimensions"] = landmark_feature_dimensions(args.coordinate_features)
-    if args.architecture in {"coordinates", "gated-fusion"}:
+    if args.architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion"}:
         model_args["landmark_bottleneck"] = args.landmark_bottleneck or None
+    if args.architecture in {"gated-fusion", "tongue-gated-fusion"}:
+        model_args["image_gate_probability"] = args.image_gate_initial_probability
+    if args.architecture == "tongue-gated-fusion":
+        model_args["inner_mouth_gate_probability"] = args.inner_mouth_gate_initial_probability
     model = model_class(**model_args).to(device)
     if args.initialize_coordinate_checkpoint:
-        if args.architecture != "gated-fusion" or not args.initialize_coordinate_checkpoint.is_file():
-            parser.error("coordinate initialization requires gated-fusion and an existing checkpoint")
+        if (args.architecture not in {"gated-fusion", "tongue-gated-fusion"}
+                or not args.initialize_coordinate_checkpoint.is_file()):
+            parser.error("coordinate initialization requires gated fusion and an existing checkpoint")
         initial = torch.load(args.initialize_coordinate_checkpoint, map_location="cpu",
                              weights_only=True)
         source = initial["model"]
@@ -280,6 +306,34 @@ def main() -> None:
         model.load_state_dict(compatible, strict=False)
         LOGGER.info("initialized %d coordinate-path tensors from %s", len(compatible),
                     args.initialize_coordinate_checkpoint)
+    if args.initialize_image_checkpoint:
+        if (args.architecture not in {"gated-fusion", "tongue-gated-fusion"}
+                or not args.initialize_image_checkpoint.is_file()):
+            parser.error("image initialization requires gated fusion and an existing checkpoint")
+        initial = torch.load(args.initialize_image_checkpoint, map_location="cpu",
+                             weights_only=True)
+        source = initial["model"]
+        image_state = {name: value for name, value in source.items()
+                       if name.startswith("frame_encoder.")
+                       and name in model.state_dict()
+                       and model.state_dict()[name].shape == value.shape}
+        if not image_state:
+            raise ValueError("image checkpoint has no compatible frame encoder")
+        model.load_state_dict(image_state, strict=False)
+        copied = len(image_state)
+        if args.architecture == "tongue-gated-fusion":
+            tongue_state = {
+                name.replace("frame_encoder.", "inner_mouth_encoder.", 1): value
+                for name, value in source.items() if name.startswith("frame_encoder.")
+                and name.replace("frame_encoder.", "inner_mouth_encoder.", 1)
+                in model.state_dict()
+                and model.state_dict()[name.replace(
+                    "frame_encoder.", "inner_mouth_encoder.", 1)].shape == value.shape
+            }
+            model.load_state_dict(tongue_state, strict=False)
+            copied += len(tongue_state)
+        LOGGER.info("initialized %d image-path tensors from %s", copied,
+                    args.initialize_image_checkpoint)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate,
                                   weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=2, factor=0.5)
@@ -306,10 +360,21 @@ def main() -> None:
     best_selection_key = (float("inf"),)
     stale = 0
     for epoch in range(1, args.epochs + 1):
+        freeze_coordinate_path = (args.architecture in {
+            "gated-fusion", "tongue-gated-fusion"
+        } and epoch <= args.freeze_coordinate_epochs)
+        for name in ("landmark_encoder", "temporal", "classifier"):
+            module = getattr(model, name, None)
+            if module is not None:
+                for parameter in module.parameters():
+                    parameter.requires_grad_(not freeze_coordinate_path)
+        if freeze_coordinate_path:
+            LOGGER.info("epoch=%d coordinate path frozen for image warm-up", epoch)
         training = run_epoch(model, train_loader, loss_fn, device, args.architecture,
                              optimizer, deadline,
                              image_modality_dropout=args.image_modality_dropout,
-                             coordinate_modality_dropout=args.coordinate_modality_dropout)
+                             coordinate_modality_dropout=args.coordinate_modality_dropout,
+                             freeze_coordinate_path=freeze_coordinate_path)
         if not training["complete"] or (deadline is not None and time.monotonic() >= deadline):
             LOGGER.warning("stopping before validation because the training time budget is exhausted")
             break
@@ -336,6 +401,8 @@ def main() -> None:
                "learning_rate": optimizer.param_groups[0]["lr"]}
         if hasattr(model, "image_gate"):
             row["image_gate"] = model.image_gate
+        if hasattr(model, "inner_mouth_gate"):
+            row["inner_mouth_gate"] = model.inner_mouth_gate
         history.append(row)
         best_per = min(best_per, valid["per"])
         LOGGER.info("epoch=%d train_loss=%.4f train_PER=%.2f%% validation_loss=%.4f validation_PER=%.2f%%",
@@ -346,6 +413,8 @@ def main() -> None:
                         100 * valid["oracle_per_at_n"], args.beam_width)
         if hasattr(model, "image_gate"):
             LOGGER.info("epoch=%d image_gate=%.5f", epoch, model.image_gate)
+        if hasattr(model, "inner_mouth_gate"):
+            LOGGER.info("epoch=%d inner_mouth_gate=%.5f", epoch, model.inner_mouth_gate)
         if selection_key < best_selection_key:
             best_selection_key = selection_key
             selected_checkpoint_per = valid["per"]
@@ -358,6 +427,10 @@ def main() -> None:
                         "coordinate_dimensions": landmark_feature_dimensions(
                             args.coordinate_features) if include_landmarks else None,
                         "landmark_bottleneck": args.landmark_bottleneck or None,
+                        "image_gate_initial_probability": args.image_gate_initial_probability,
+                        "inner_mouth_gate_initial_probability": (
+                            args.inner_mouth_gate_initial_probability
+                            if args.architecture == "tongue-gated-fusion" else None),
                         "selection_metric": args.selection_metric,
                         "decoding": {"top_n": args.top_n, "beam_width": args.beam_width,
                                      "beam_token_top_k": args.beam_token_top_k,
@@ -381,6 +454,9 @@ def main() -> None:
                 "initialize_coordinate_checkpoint": (
                     str(args.initialize_coordinate_checkpoint)
                     if args.initialize_coordinate_checkpoint else None),
+                "initialize_image_checkpoint": (
+                    str(args.initialize_image_checkpoint)
+                    if args.initialize_image_checkpoint else None),
             },
             "history": history, "best_validation_per": best_per,
             "selected_checkpoint_validation_per": selected_checkpoint_per,
