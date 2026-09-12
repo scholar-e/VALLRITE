@@ -31,6 +31,23 @@ Coordinate/fusion models still need their existing `--landmarks-npz` argument.
 `--emissions-output` is independently optional. Use a real lexicon matching your
 application: the supplied example only knows pat, bat, and mat.
 
+Generate realistic candidate-ranking examples from a frozen visual checkpoint
+and measure the lexical decoder on GRID:
+
+```bash
+.venv-vpa-gpu/bin/python -m PhonemeDecoder.evaluate_grid \
+  --checkpoint path/to/best.pt --split train \
+  --output-dir datasets/decoder-training/grid-train
+```
+
+This writes `examples.jsonl`, the generated runtime `lexicon.json`, a summary,
+and a dual-output log. Each example contains the reference words and phones,
+greedy visual phones, ranked lexical candidates, and Top-1/oracle errors. A run
+on `train` is explicitly marked as an in-sample diagnostic because the visual
+producer has already seen those speakers. Use out-of-fold visual checkpoints
+before treating these records as unbiased decoder-training data. The command
+does not expose locked test speakers.
+
 ```python
 from PhonemeDecoder import Lexicon, StreamingDecoder, probabilities_from_logits
 
