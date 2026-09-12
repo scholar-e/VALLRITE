@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv*/
+.cache/
+checkpoints/
+datasets/
+logs/
+results_lora/
+qwen_phonemes_to_text_lora/
+qwen_phonemes_to_text_lora_merged/

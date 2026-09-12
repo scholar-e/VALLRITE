@@ -1,0 +1,10 @@
+# Qwen3.5 requires a newer runtime than the pinned upstream VALLR environment.
+torch>=2.5
+transformers>=5.16
+accelerate>=1.0
+datasets>=2.21
+peft>=0.12
+pronouncing>=0.3
+decord==0.6.0
+numpy>=2.0
+yt-dlp>=2026.8.19

@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pronunciation lexicon 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "phone_inventory",
+    "source",
+    "words"
+  ],
+  "properties": {
+    "schema": {
+      "const": "phoneme-lexicon-0.1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phone_inventory": {
+      "const": [
+        "AA",
+        "AE",
+        "AH",
+        "AO",
+        "AW",
+        "AY",
+        "B",
+        "CH",
+        "D",
+        "DH",
+        "EH",
+        "ER",
+        "EY",
+        "F",
+        "G",
+        "HH",
+        "IH",
+        "IY",
+        "JH",
+        "K",
+        "L",
+        "M",
+        "N",
+        "NG",
+        "OW",
+        "OY",
+        "P",
+        "R",
+        "S",
+        "SH",
+        "T",
+        "TH",
+        "UH",
+        "UW",
+        "V",
+        "W",
+        "Y",
+        "Z",
+        "ZH"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "revision",
+        "license"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "words": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "pronunciations"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pronunciations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "phones",
+                "prior"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "phones": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "AA",
+                      "AE",
+                      "AH",
+                      "AO",
+                      "AW",
+                      "AY",
+                      "B",
+                      "CH",
+                      "D",
+                      "DH",
+                      "EH",
+                      "ER",
+                      "EY",
+                      "F",
+                      "G",
+                      "HH",
+                      "IH",
+                      "IY",
+                      "JH",
+                      "K",
+                      "L",
+                      "M",
+                      "N",
+                      "NG",
+                      "OW",
+                      "OY",
+                      "P",
+                      "R",
+                      "S",
+                      "SH",
+                      "T",
+                      "TH",
+                      "UH",
+                      "UW",
+                      "V",
+                      "W",
+                      "Y",
+                      "Z",
+                      "ZH"
+                    ]
+                  },
+                  "minItems": 1,
+                  "maxItems": 64
+                },
+                "prior": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1
+                }
+              }
+            },
+            "minItems": 1,
+            "maxItems": 128
+          }
+        }
+      },
+      "minItems": 1,
+      "maxItems": 500000
+    }
+  }
+}

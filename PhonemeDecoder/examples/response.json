@@ -1,0 +1,124 @@
+{
+  "schema": "phoneme-decoder-response-0.1",
+  "request_id": "synthetic-ambiguity-1",
+  "request_sha256": "d5fbb4976bf03a08273d4a1fcdee92e2e7f5d1e3857006f68078389563533d4f",
+  "status": "ok",
+  "candidates": [
+    {
+      "id": "pat",
+      "words": [
+        {
+          "word_id": "pat",
+          "text": "pat",
+          "start_ms": null,
+          "end_ms": null
+        }
+      ],
+      "base_score": -0.7458915272148108,
+      "reranker_score": null,
+      "final_score": -0.7458915272148108,
+      "representative_path": {
+        "phones": [
+          "P",
+          "AE",
+          "T"
+        ],
+        "pronunciation_ids": [
+          "pat-1"
+        ],
+        "ctc_log_mass": -0.7458915272148108,
+        "pronunciation_log_prior": 0,
+        "lm_log_probability": 0,
+        "word_count": 1,
+        "weighted_total": -0.7458915272148108
+      }
+    },
+    {
+      "id": "bat",
+      "words": [
+        {
+          "word_id": "bat",
+          "text": "bat",
+          "start_ms": null,
+          "end_ms": null
+        }
+      ],
+      "base_score": -1.1951592579813681,
+      "reranker_score": null,
+      "final_score": -1.1951592579813681,
+      "representative_path": {
+        "phones": [
+          "B",
+          "AE",
+          "T"
+        ],
+        "pronunciation_ids": [
+          "bat-1"
+        ],
+        "ctc_log_mass": -1.1951592579813681,
+        "pronunciation_log_prior": 0,
+        "lm_log_probability": 0,
+        "word_count": 1,
+        "weighted_total": -1.1951592579813681
+      }
+    },
+    {
+      "id": "mat",
+      "words": [
+        {
+          "word_id": "mat",
+          "text": "mat",
+          "start_ms": null,
+          "end_ms": null
+        }
+      ],
+      "base_score": -3.2026273000361143,
+      "reranker_score": null,
+      "final_score": -3.2026273000361143,
+      "representative_path": {
+        "phones": [
+          "M",
+          "AE",
+          "T"
+        ],
+        "pronunciation_ids": [
+          "mat-1"
+        ],
+        "ctc_log_mass": -3.2026273000361143,
+        "pronunciation_log_prior": 0,
+        "lm_log_probability": 0,
+        "word_count": 1,
+        "weighted_total": -3.2026273000361143
+      }
+    },
+    {
+      "id": "empty",
+      "words": [],
+      "base_score": -10.97643209445566,
+      "reranker_score": null,
+      "final_score": -10.97643209445566,
+      "representative_path": {
+        "phones": [],
+        "pronunciation_ids": [],
+        "ctc_log_mass": -10.97643209445566,
+        "pronunciation_log_prior": 0,
+        "lm_log_probability": 0,
+        "word_count": 0,
+        "weighted_total": -10.97643209445566
+      }
+    }
+  ],
+  "diagnostics": {
+    "search_mode": "exhaustive_fixture",
+    "approximate_search": false,
+    "retained_prefix_log_mass": 0,
+    "warnings": [
+      "Synthetic exhaustive fixture; not decoder or model output."
+    ],
+    "failure_reason": null,
+    "elapsed_ms": null,
+    "error_code": null,
+    "empty_prefix_log_mass": -10.97643209445566,
+    "reranker_filtered_count": 0
+  }
+}

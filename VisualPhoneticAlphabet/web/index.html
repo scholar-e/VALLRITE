@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visual Phonetic Alphabet · Inspector</title>
+<style>
+:root {color-scheme:light; font-family: system-ui,sans-serif; color:#233730; background:#f7f8f5; accent-color:#236b53}
+* {box-sizing:border-box} body {margin:0} main {max-width:1100px;margin:auto;padding:36px 24px} h1 {font-size:28px;letter-spacing:-.025em;margin:0 0 10px} h2 {font-size:18px;margin:0 0 16px} p {line-height:1.6;max-width:74ch;color:#506159} header {margin-bottom:28px} button,select,input {font:inherit} button,select {padding:8px 12px;border:1px solid #a8b8ae;border-radius:5px;background:white;color:inherit} button {cursor:pointer} button:hover {background:#e7eee8} :focus-visible {outline:3px solid #236b53;outline-offset:3px} ::selection {background:#c2e9d1} .toolbar {display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:22px 0} input[type=file] {max-width:100%;font-size:14px} .layout {display:grid;grid-template-columns:1.1fr 1fr;gap:32px} section {border-top:1px solid #ccd5ce;padding-top:20px;margin-top:22px} #mouth {width:100%;height:270px;background:#eaf0e9;border-radius:6px} .controls {display:flex;align-items:center;gap:14px;margin-top:14px} #scrub {flex:1;min-width:50px} output,td,.time {font-variant-numeric:tabular-nums} table {border-collapse:collapse;width:100%;font-size:14px} th,td {padding:9px 0;border-bottom:1px solid #dbe1dc;text-align:left} td:last-child {text-align:right} th {font-weight:500;color:#506159} .muted {font-size:13px;color:#506159} #clip {overflow-wrap:anywhere} #status {font-weight:600} #error {color:#9b2424} #chart {width:100%;height:140px;display:block} .timeline {display:grid;grid-template-columns:90px 1fr;gap:9px;font-size:13px;align-items:center} .track {height:23px;background:#e7ece7;position:relative} .event {position:absolute;height:100%;background:#337b60;border:0;border-radius:0;min-width:2px;padding:0} .event:hover {background:#174f39} .cursor {position:absolute;top:0;height:100%;border-left:2px solid #152b22;pointer-events:none} #active {min-height:24px} footer {margin-top:32px;border-top:1px solid #ccd5ce;padding-top:12px} @media(max-width:700px){main{padding:24px 16px}.layout{grid-template-columns:1fr;gap:0}h1{font-size:25px}.controls{gap:8px}}
+#source-video[hidden] {display:none}
+.video-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.video-heading h2 {margin:0}
+.video-heading label {font-size:14px}
+.video-stage {position:relative;isolation:isolate;background:#18231d;border-radius:6px;overflow:hidden;min-height:440px}
+#source-video {display:block;width:100%;min-height:440px;max-height:720px;object-fit:contain}
+.frame-overlay {position:absolute;inset:14px 14px 60px;display:flex;justify-content:flex-end;align-items:flex-start;pointer-events:none}
+.frame-overlay[hidden] {display:none}
+.overlay-panel {width:285px;max-height:100%;overflow:auto;padding:14px;background:rgb(15 28 23 / 86%);color:#f1f8f3;border-radius:5px;pointer-events:auto;scrollbar-color:#95b3a3 #18231d}
+.overlay-panel h2 {font-size:15px;margin:0 0 6px}
+.overlay-panel #status {color:#d2e3d9;font-size:12px;margin:0 0 8px}
+.overlay-panel table {font-size:12px}
+.overlay-panel th,.overlay-panel td {padding:5px 0;border-color:#496055;color:#f1f8f3}
+.overlay-panel th {font-weight:400}
+.landmark-details {margin-top:12px;font-size:12px}
+.landmark-details summary {cursor:pointer;padding:4px 0}
+.overlay-panel #mouth {height:125px;margin-top:8px}
+#video-status {overflow-wrap:anywhere}
+@media(max-width:700px){.video-stage,#source-video{min-height:420px}.frame-overlay{inset:8px 8px 54px}.overlay-panel{width:205px;padding:10px}.overlay-panel table{font-size:11px}.overlay-panel th,.overlay-panel td{padding:4px 0}.overlay-panel h2{font-size:14px}}
+#video-points {position:absolute;pointer-events:none;z-index:1} .frame-overlay {z-index:2}
+.controls {flex-wrap:wrap}.controls #scrub {flex-basis:150px}
+</style>
+<main>
+<header><h1>Visual Phonetic Alphabet</h1><p>Explore the visible speech measurements and provisional gestures produced by the current VPA baseline.</p></header>
+<div class="toolbar"><label>Load VPA JSON / JSONL <input id="file" type="file" accept=".json,.jsonl,application/json"></label><button id="demo">Reset to sample</button><label>Clip <select id="records" aria-label="Clip record"></select></label></div>
+<p id="error" role="alert"></p><p id="clip"></p><p class="muted" id="summary"></p>
+<section id="video-section"><div class="video-heading"><h2>Video &amp; frame data</h2><label><input id="show-overlay" type="checkbox" checked> Show frame overlay</label><label><input id="show-points" type="checkbox" checked> Show mouth points</label></div>
+<div class="video-stage">
+<video id="source-video" controls muted playsinline preload="auto" src="sample.mp4" aria-label="Source clip"></video>
+<svg id="video-points" aria-label="Tracked mouth points in source video coordinates" role="img"></svg>
+<div id="frame-overlay" class="frame-overlay">
+<div class="overlay-panel"><h2>Frame measurements</h2><p id="status"></p>
+<table><thead><tr><th scope="col">Measurement</th><th scope="col" style="text-align:right">Value</th></tr></thead><tbody id="measurements"></tbody></table>
+<details class="landmark-details"><summary>Normalized mouth landmarks</summary><svg id="mouth" viewBox="0 0 460 270" role="img" aria-label="Normalized mouth and chin landmarks"></svg></details>
+</div></div></div>
+<div class="controls"><button id="previous-frame" aria-label="Previous frame">Back 1 frame</button><button id="play">Play</button><button id="next-frame" aria-label="Next frame">Forward 1 frame</button><input id="scrub" type="range" min="0" value="0" aria-label="Frame"><output id="time"></output></div>
+<div class="toolbar"><label>Playback speed <select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option></select></label><label>Point size <input id="point-size" type="range" min="1" max="5" step="0.5" value="1.5"></label></div>
+<p class="muted">Measurements overlay the source video and update with playback. Rounding and closure are geometry proxies, not probabilities. Additional measurements describe projected opening area, side gaps, asymmetry, and lip thickness; these are exploratory, not validated phoneme discriminators. The expandable landmark view uses eye-distance units; it is not positioned on the face.</p>
+<p id="tracking-status" class="muted" role="status"></p>
+<p id="video-status" class="muted" role="status"></p>
+<label>Choose matching video <input id="video-file" type="file" accept="video/*"></label>
+<p class="muted">Video and frame controls share the clip’s timestamps. Outside the exported data range, the nearest recorded frame stays visible. The sample measurements cover the first two seconds and use a manual speaker region.</p>
+</section>
+<section><h2>Measurements over time</h2><label>Plot <select id="feature"></select></label><svg id="chart" viewBox="0 0 1000 140" role="img" aria-label="Selected measurement over time"></svg><p class="muted" id="scale"></p></section>
+<section><h2>Gesture intervals</h2><div id="timeline" class="timeline"></div><p id="active"></p><p class="muted">Select an interval to jump to its first frame. Tokens can overlap; thresholds are provisional. BCL and BCL-REL are compatible with /p/, /b/, /m/, without ranking them.</p></section>
+<footer><p class="muted">M0 / partial M1 · vpa-0.1 · No phoneme predictions or transcript are produced. Voicing, nasality, and hidden tongue position are unobservable. Files stay in your browser.</p></footer>
+</main>
+<script src="sample.js?v=7"></script><script src="shape.js?v=7"></script><script src="viewer.js?v=7"></script>
+</html>
