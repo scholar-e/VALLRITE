@@ -1,0 +1,26 @@
+2026-09-12 15:39:51,613 - original_vallr_per - INFO - evaluate_original_vallr_per.py:200 - loading checkpoint=/tmp/vallr-original.pth device=cpu
+2026-09-12 15:39:58,056 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=10/240
+2026-09-12 15:40:02,360 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=20/240
+2026-09-12 15:40:06,585 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=30/240
+2026-09-12 15:40:10,915 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=40/240
+2026-09-12 15:40:15,244 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=50/240
+2026-09-12 15:40:19,434 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=60/240
+2026-09-12 15:40:23,751 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=70/240
+2026-09-12 15:40:27,960 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=80/240
+2026-09-12 15:40:32,279 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=90/240
+2026-09-12 15:40:36,503 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=100/240
+2026-09-12 15:40:40,856 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=110/240
+2026-09-12 15:40:45,111 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=120/240
+2026-09-12 15:40:49,345 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=130/240
+2026-09-12 15:40:53,584 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=140/240
+2026-09-12 15:40:57,970 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=150/240
+2026-09-12 15:41:02,130 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=160/240
+2026-09-12 15:41:06,553 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=170/240
+2026-09-12 15:41:10,814 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=180/240
+2026-09-12 15:41:15,130 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=190/240
+2026-09-12 15:41:19,391 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=200/240
+2026-09-12 15:41:23,844 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=210/240
+2026-09-12 15:41:28,110 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=220/240
+2026-09-12 15:41:32,422 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=230/240
+2026-09-12 15:41:36,874 - original_vallr_per - INFO - evaluate_original_vallr_per.py:230 - evaluated words=240/240
+2026-09-12 15:41:37,366 - original_vallr_per - INFO - evaluate_original_vallr_per.py:255 - PER=101.61% errors=695 phones=684 exact_words=0/240 seconds=103.0 report=evaluation/original-vallr-grid-word-per.json

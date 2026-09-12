@@ -1,0 +1,4309 @@
+{
+  "created_utc": "2026-09-12T22:41:36.874851+00:00",
+  "scope": "Out-of-domain held-out GRID word segments; not the in-domain LRS3 test PER",
+  "checkpoint": "/home/elinzi/Coding/VALLRITE/checkpoints/original-vallr/model.pth",
+  "checkpoint_sha256": "bb6472606884d30a4a09be4a89e173501c2ca86c4da7ee2e2c1265f5b0d09233",
+  "dataset": "GRID",
+  "split": "test",
+  "seed": 20260912,
+  "sampling": "deterministic shuffled aligned words",
+  "preprocessing": {
+    "frames": 16,
+    "color": "RGB",
+    "crop": "face",
+    "size": 224,
+    "normalization": "zero-one",
+    "context_seconds_each_side": 0.0
+  },
+  "decode": "greedy argmax with standard CTC repeat collapse and blank removal",
+  "words": 240,
+  "reference_phones": 684,
+  "substitutions": 541,
+  "deletions": 62,
+  "insertions": 92,
+  "errors": 695,
+  "per": 1.0160818713450293,
+  "exact_words": 0,
+  "exact_word_accuracy": 0.0,
+  "seconds": 103.02328741300153,
+  "records": [
+    {
+      "clip_id": "s11:lgwf3s",
+      "word_index": 0,
+      "word": "lay",
+      "reference": [
+        "L",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:sran1a",
+      "word_index": 4,
+      "word": "one",
+      "reference": [
+        "W",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bgis6p",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:brbf3p",
+      "word_index": 4,
+      "word": "three",
+      "reference": [
+        "TH",
+        "R",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bwwg2s",
+      "word_index": 4,
+      "word": "two",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:pgbd3s",
+      "word_index": 4,
+      "word": "three",
+      "reference": [
+        "TH",
+        "R",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lgwf2n",
+      "word_index": 4,
+      "word": "two",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lgwl8p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bgwg9s",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lbac8p",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:swwb5s",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lwwz1a",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "TH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lgalzp",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s12:swig5n",
+      "word_index": 4,
+      "word": "five",
+      "reference": [
+        "F",
+        "AY",
+        "V"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sbwa5a",
+      "word_index": 4,
+      "word": "five",
+      "reference": [
+        "F",
+        "AY",
+        "V"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pgadzp",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sgbb8a",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:brir4p",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lgbf1a",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbbtzs",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srwuzs",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "TH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwib8s",
+      "word_index": 0,
+      "word": "place",
+      "reference": [
+        "P",
+        "L",
+        "EY",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lrwy2s",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sgau7a",
+      "word_index": 3,
+      "word": "letteru",
+      "reference": [
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:sritza",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bbbr4s",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bgwt8a",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lwid3n",
+      "word_index": 3,
+      "word": "letterd",
+      "reference": [
+        "D",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lrixzs",
+      "word_index": 3,
+      "word": "letterx",
+      "reference": [
+        "EH",
+        "K",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lgwr9n",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "TH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:brwl9n",
+      "word_index": 5,
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lgws1s",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "S",
+        "B"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srim6a",
+      "word_index": 4,
+      "word": "six",
+      "reference": [
+        "S",
+        "IH",
+        "K",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sgao1s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbas8a",
+      "word_index": 3,
+      "word": "letters",
+      "reference": [
+        "EH",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:sgao2a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbil7n",
+      "word_index": 4,
+      "word": "seven",
+      "reference": [
+        "S",
+        "EH",
+        "V",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 2,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sbwn2p",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lrix2a",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lwak4p",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lrax3n",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:pwib8n",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "HH",
+        "W",
+        "AY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lrwe2p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lwij8n",
+      "word_index": 0,
+      "word": "lay",
+      "reference": [
+        "L",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:bbae5a",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sbwa5a",
+      "word_index": 3,
+      "word": "lettera",
+      "reference": [
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s11:pbwi5a",
+      "word_index": 3,
+      "word": "letteri",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "M",
+        "B",
+        "Z"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s11:pbbu7s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pbbu8p",
+      "word_index": 3,
+      "word": "letteru",
+      "reference": [
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lrwe2a",
+      "word_index": 3,
+      "word": "lettere",
+      "reference": [
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s11:lwwl3a",
+      "word_index": 4,
+      "word": "three",
+      "reference": [
+        "TH",
+        "R",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pbit7n",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:pwwj6p",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lgbe8s",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sgaozs",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bgba2p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lrwezs",
+      "word_index": 4,
+      "word": "zero",
+      "reference": [
+        "Z",
+        "IY",
+        "R",
+        "OW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bwil3n",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lgae5p",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "M",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:pwbj2a",
+      "word_index": 3,
+      "word": "letterj",
+      "reference": [
+        "JH",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:brar8a",
+      "word_index": 3,
+      "word": "letterr",
+      "reference": [
+        "AA",
+        "R"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:pbau2n",
+      "word_index": 5,
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:sbwa4p",
+      "word_index": 4,
+      "word": "four",
+      "reference": [
+        "F",
+        "AO",
+        "R"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lwaq8a",
+      "word_index": 3,
+      "word": "letterq",
+      "reference": [
+        "K",
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:swat7n",
+      "word_index": 3,
+      "word": "lettert",
+      "reference": [
+        "T",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lgbz2p",
+      "word_index": 0,
+      "word": "lay",
+      "reference": [
+        "L",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:sgwo8n",
+      "word_index": 4,
+      "word": "eight",
+      "reference": [
+        "EY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:pgwd8a",
+      "word_index": 3,
+      "word": "letterd",
+      "reference": [
+        "D",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lwid5s",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "W",
+        "AY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lrad2s",
+      "word_index": 0,
+      "word": "lay",
+      "reference": [
+        "L",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:srag6p",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:swaa9a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sbwn3a",
+      "word_index": 3,
+      "word": "lettern",
+      "reference": [
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:swan4s",
+      "word_index": 3,
+      "word": "lettern",
+      "reference": [
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lbbx2n",
+      "word_index": 0,
+      "word": "lay",
+      "reference": [
+        "L",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:sgah8a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwii3p",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "W",
+        "AY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pbah7a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pbaa9n",
+      "word_index": 4,
+      "word": "nine",
+      "reference": [
+        "N",
+        "AY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lgik5s",
+      "word_index": 4,
+      "word": "five",
+      "reference": [
+        "F",
+        "AY",
+        "V"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bgbm7n",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:prbc1s",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sran1a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:brwf8a",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:swah1s",
+      "word_index": 4,
+      "word": "one",
+      "reference": [
+        "W",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pbbi1a",
+      "word_index": 0,
+      "word": "place",
+      "reference": [
+        "P",
+        "L",
+        "EY",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:prib5a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lbwx7s",
+      "word_index": 3,
+      "word": "letterx",
+      "reference": [
+        "EH",
+        "K",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sgin6n",
+      "word_index": 5,
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:pbin6p",
+      "word_index": 3,
+      "word": "lettern",
+      "reference": [
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:swig5n",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:swwu6n",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "W",
+        "AY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lwbr2p",
+      "word_index": 3,
+      "word": "letterr",
+      "reference": [
+        "AA",
+        "R"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lwbe3p",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "W",
+        "AY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sgab2s",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:praizs",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bwbm1n",
+      "word_index": 4,
+      "word": "one",
+      "reference": [
+        "W",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lgwf3p",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "TH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwbc5n",
+      "word_index": 4,
+      "word": "five",
+      "reference": [
+        "F",
+        "AY",
+        "V"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bbay5p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bgwa5s",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwwd1p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bgwn5a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bgwn1n",
+      "word_index": 4,
+      "word": "one",
+      "reference": [
+        "W",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbis4a",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:prab8p",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:bbae5a",
+      "word_index": 4,
+      "word": "five",
+      "reference": [
+        "F",
+        "AY",
+        "V"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srbt6s",
+      "word_index": 3,
+      "word": "lettert",
+      "reference": [
+        "T",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:prao6p",
+      "word_index": 0,
+      "word": "place",
+      "reference": [
+        "P",
+        "L",
+        "EY",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH"
+      ],
+      "substitutions": 2,
+      "deletions": 2,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srigzs",
+      "word_index": 3,
+      "word": "letterg",
+      "reference": [
+        "JH",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:bbie1a",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lbwd3n",
+      "word_index": 5,
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:swia2s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pgip2s",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:brar7s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srag5p",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srba3n",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pbihzn",
+      "word_index": 3,
+      "word": "letterh",
+      "reference": [
+        "EY",
+        "CH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:prau8n",
+      "word_index": 3,
+      "word": "letteru",
+      "reference": [
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:bgbg4n",
+      "word_index": 3,
+      "word": "letterg",
+      "reference": [
+        "JH",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:pbab1p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:swboza",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:srim5s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bbae4p",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bwwa1a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sgia8n",
+      "word_index": 5,
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:brar8a",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bbiy1p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pwii2n",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "M",
+        "B",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:bbay6a",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lwix6n",
+      "word_index": 4,
+      "word": "six",
+      "reference": [
+        "S",
+        "IH",
+        "K",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lraq2p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sbaf9s",
+      "word_index": 3,
+      "word": "letterf",
+      "reference": [
+        "EH",
+        "F"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:sbiz6s",
+      "word_index": 3,
+      "word": "letterz",
+      "reference": [
+        "Z",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bwaf6p",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "W",
+        "AY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lwix6s",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:pgij1a",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "M",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lbaj1p",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lwiq1n",
+      "word_index": 4,
+      "word": "one",
+      "reference": [
+        "W",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwwc9n",
+      "word_index": 3,
+      "word": "letterc",
+      "reference": [
+        "S",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lgwszn",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbaf9p",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sbbt1s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bgbm8s",
+      "word_index": 3,
+      "word": "letterm",
+      "reference": [
+        "EH",
+        "M"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:sraa2a",
+      "word_index": 4,
+      "word": "two",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:brilzp",
+      "word_index": 4,
+      "word": "zero",
+      "reference": [
+        "Z",
+        "IH",
+        "R",
+        "OW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pbbiza",
+      "word_index": 4,
+      "word": "zero",
+      "reference": [
+        "Z",
+        "IH",
+        "R",
+        "OW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:srwn8p",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lbwq4p",
+      "word_index": 3,
+      "word": "letterq",
+      "reference": [
+        "K",
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:prwc7a",
+      "word_index": 4,
+      "word": "seven",
+      "reference": [
+        "S",
+        "EH",
+        "V",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 2,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bbay6a",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbwa3p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srba3n",
+      "word_index": 3,
+      "word": "lettera",
+      "reference": [
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s11:pgwq4n",
+      "word_index": 3,
+      "word": "letterq",
+      "reference": [
+        "K",
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbaf7n",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srba6a",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bgif6n",
+      "word_index": 3,
+      "word": "letterf",
+      "reference": [
+        "EH",
+        "F"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lbav8n",
+      "word_index": 0,
+      "word": "lay",
+      "reference": [
+        "L",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:bwisza",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lwad7n",
+      "word_index": 0,
+      "word": "lay",
+      "reference": [
+        "L",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:swbo1a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "M",
+        "B"
+      ],
+      "substitutions": 2,
+      "deletions": 2,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lway1s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbwg8a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bwas4p",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "W",
+        "AY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lwwr7a",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "TH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lrwk6a",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pbwb8n",
+      "word_index": 4,
+      "word": "eight",
+      "reference": [
+        "EY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:pwbp6p",
+      "word_index": 3,
+      "word": "letterp",
+      "reference": [
+        "P",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lbbj5p",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lbac6n",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:srbt7p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pwio6n",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:lrbq7a",
+      "word_index": 0,
+      "word": "lay",
+      "reference": [
+        "L",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:sgiu2a",
+      "word_index": 4,
+      "word": "two",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:bwas3s",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bwas5a",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:srwn5n",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bwwtzs",
+      "word_index": 4,
+      "word": "zero",
+      "reference": [
+        "Z",
+        "IH",
+        "R",
+        "OW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lrwk6a",
+      "word_index": 3,
+      "word": "letterk",
+      "reference": [
+        "K",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lrbk1p",
+      "word_index": 4,
+      "word": "one",
+      "reference": [
+        "W",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:swig9a",
+      "word_index": 4,
+      "word": "nine",
+      "reference": [
+        "N",
+        "AY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sram9p",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pwac4p",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:sbwg7p",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "TH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lwwlzn",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pgwkzn",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "TH"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:brafzp",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "B",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lgae5p",
+      "word_index": 5,
+      "word": "please",
+      "reference": [
+        "P",
+        "L",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "M",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwwp8s",
+      "word_index": 4,
+      "word": "eight",
+      "reference": [
+        "EY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:pwib7n",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:prio1s",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:brbf2s",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pwio7s",
+      "word_index": 0,
+      "word": "place",
+      "reference": [
+        "P",
+        "L",
+        "EY",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pgbqzs",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bbiy2p",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwao9n",
+      "word_index": 3,
+      "word": "lettero",
+      "reference": [
+        "OW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s11:bgim3a",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:srag5s",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:brbl6s",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lrwk5p",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pgwq7a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lraj8a",
+      "word_index": 2,
+      "word": "at",
+      "reference": [
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:bbak9a",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lwwlzs",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lgay6s",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lrix2a",
+      "word_index": 3,
+      "word": "letterx",
+      "reference": [
+        "EH",
+        "K",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lgak9s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pbab2a",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sram8s",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bral2s",
+      "word_index": 1,
+      "word": "red",
+      "reference": [
+        "R",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwwx4a",
+      "word_index": 5,
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:swaa6s",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "W",
+        "AY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bwaf3n",
+      "word_index": 1,
+      "word": "white",
+      "reference": [
+        "W",
+        "AY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:pbbo3s",
+      "word_index": 3,
+      "word": "lettero",
+      "reference": [
+        "OW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s11:bgwn2n",
+      "word_index": 0,
+      "word": "bin",
+      "reference": [
+        "B",
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sbil9s",
+      "word_index": 4,
+      "word": "nine",
+      "reference": [
+        "N",
+        "AY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lbbj6p",
+      "word_index": 2,
+      "word": "by",
+      "reference": [
+        "B",
+        "AY"
+      ],
+      "hypothesis": [
+        "M",
+        "B",
+        "Z"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:pwivzn",
+      "word_index": 4,
+      "word": "zero",
+      "reference": [
+        "Z",
+        "IH",
+        "R",
+        "OW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lgay7p",
+      "word_index": 3,
+      "word": "lettery",
+      "reference": [
+        "W",
+        "AY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:pgic6a",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:swig6s",
+      "word_index": 2,
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s11:brae8n",
+      "word_index": 4,
+      "word": "eight",
+      "reference": [
+        "EY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:pgaj2s",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:lbii5n",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:swia5a",
+      "word_index": 0,
+      "word": "set",
+      "reference": [
+        "S",
+        "EH",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:srwb1a",
+      "word_index": 2,
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "TH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sbaf7n",
+      "word_index": 4,
+      "word": "seven",
+      "reference": [
+        "S",
+        "EH",
+        "V",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 2,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:pwib7n",
+      "word_index": 0,
+      "word": "place",
+      "reference": [
+        "P",
+        "L",
+        "EY",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH"
+      ],
+      "substitutions": 2,
+      "deletions": 2,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:lraj8p",
+      "word_index": 4,
+      "word": "eight",
+      "reference": [
+        "EY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:pwac2s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:bbae2n",
+      "word_index": 3,
+      "word": "lettere",
+      "reference": [
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s11:brwf8p",
+      "word_index": 4,
+      "word": "eight",
+      "reference": [
+        "EY",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "M"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lwaeza",
+      "word_index": 3,
+      "word": "lettere",
+      "reference": [
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 2
+    },
+    {
+      "clip_id": "s11:lbbq1a",
+      "word_index": 1,
+      "word": "blue",
+      "reference": [
+        "B",
+        "L",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bgam3n",
+      "word_index": 3,
+      "word": "letterm",
+      "reference": [
+        "EH",
+        "M"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lwwr3n",
+      "word_index": 5,
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    },
+    {
+      "clip_id": "s12:lbbx2s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s11:sgau7a",
+      "word_index": 1,
+      "word": "green",
+      "reference": [
+        "G",
+        "R",
+        "IY",
+        "N"
+      ],
+      "hypothesis": [
+        "M",
+        "JH",
+        "M"
+      ],
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:sgwo8s",
+      "word_index": 5,
+      "word": "soon",
+      "reference": [
+        "S",
+        "UW",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "N"
+      ],
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0
+    },
+    {
+      "clip_id": "s12:bgas9p",
+      "word_index": 3,
+      "word": "letters",
+      "reference": [
+        "EH",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1
+    }
+  ]
+}
