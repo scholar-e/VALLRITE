@@ -1,0 +1,97 @@
+{
+  "schema": "phoneme-lexicon-0.1",
+  "id": "synthetic-pat-bat-mat",
+  "phone_inventory": [
+    "AA",
+    "AE",
+    "AH",
+    "AO",
+    "AW",
+    "AY",
+    "B",
+    "CH",
+    "D",
+    "DH",
+    "EH",
+    "ER",
+    "EY",
+    "F",
+    "G",
+    "HH",
+    "IH",
+    "IY",
+    "JH",
+    "K",
+    "L",
+    "M",
+    "N",
+    "NG",
+    "OW",
+    "OY",
+    "P",
+    "R",
+    "S",
+    "SH",
+    "T",
+    "TH",
+    "UH",
+    "UW",
+    "V",
+    "W",
+    "Y",
+    "Z",
+    "ZH"
+  ],
+  "source": {
+    "name": "Hand-authored format fixture",
+    "revision": "1",
+    "license": "Project-authored example; not a corpus extract"
+  },
+  "words": [
+    {
+      "id": "pat",
+      "text": "pat",
+      "pronunciations": [
+        {
+          "id": "pat-1",
+          "phones": [
+            "P",
+            "AE",
+            "T"
+          ],
+          "prior": 1
+        }
+      ]
+    },
+    {
+      "id": "bat",
+      "text": "bat",
+      "pronunciations": [
+        {
+          "id": "bat-1",
+          "phones": [
+            "B",
+            "AE",
+            "T"
+          ],
+          "prior": 1
+        }
+      ]
+    },
+    {
+      "id": "mat",
+      "text": "mat",
+      "pronunciations": [
+        {
+          "id": "mat-1",
+          "phones": [
+            "M",
+            "AE",
+            "T"
+          ],
+          "prior": 1
+        }
+      ]
+    }
+  ]
+}

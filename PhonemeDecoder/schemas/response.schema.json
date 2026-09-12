@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phoneme decoder response 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "request_id",
+    "request_sha256",
+    "status",
+    "candidates",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema": {
+      "const": "phoneme-decoder-response-0.1"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "request_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "no_evidence",
+        "no_lexical_path",
+        "invalid_input",
+        "resource_mismatch",
+        "resource_limit"
+      ]
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "words",
+          "base_score",
+          "reranker_score",
+          "final_score",
+          "representative_path"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "words": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "word_id",
+                "text",
+                "start_ms",
+                "end_ms"
+              ],
+              "properties": {
+                "word_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "start_ms": {
+                  "type": "null"
+                },
+                "end_ms": {
+                  "type": "null"
+                }
+              }
+            },
+            "minItems": 0,
+            "maxItems": 128
+          },
+          "base_score": {
+            "type": "number"
+          },
+          "reranker_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "final_score": {
+            "type": "number"
+          },
+          "representative_path": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "phones",
+              "pronunciation_ids",
+              "ctc_log_mass",
+              "pronunciation_log_prior",
+              "lm_log_probability",
+              "word_count",
+              "weighted_total"
+            ],
+            "properties": {
+              "phones": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "AA",
+                    "AE",
+                    "AH",
+                    "AO",
+                    "AW",
+                    "AY",
+                    "B",
+                    "CH",
+                    "D",
+                    "DH",
+                    "EH",
+                    "ER",
+                    "EY",
+                    "F",
+                    "G",
+                    "HH",
+                    "IH",
+                    "IY",
+                    "JH",
+                    "K",
+                    "L",
+                    "M",
+                    "N",
+                    "NG",
+                    "OW",
+                    "OY",
+                    "P",
+                    "R",
+                    "S",
+                    "SH",
+                    "T",
+                    "TH",
+                    "UH",
+                    "UW",
+                    "V",
+                    "W",
+                    "Y",
+                    "Z",
+                    "ZH"
+                  ]
+                },
+                "minItems": 0,
+                "maxItems": 10000
+              },
+              "pronunciation_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 0,
+                "maxItems": 128
+              },
+              "ctc_log_mass": {
+                "type": "number",
+                "maximum": 0
+              },
+              "pronunciation_log_prior": {
+                "type": "number",
+                "maximum": 0
+              },
+              "lm_log_probability": {
+                "type": "number",
+                "maximum": 0
+              },
+              "word_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 128
+              },
+              "weighted_total": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "minItems": 0,
+      "maxItems": 20
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "search_mode",
+        "approximate_search",
+        "retained_prefix_log_mass",
+        "warnings",
+        "failure_reason",
+        "elapsed_ms",
+        "error_code",
+        "empty_prefix_log_mass",
+        "reranker_filtered_count"
+      ],
+      "properties": {
+        "search_mode": {
+          "enum": [
+            "reference_two_stage",
+            "exhaustive_fixture",
+            "not_applicable"
+          ]
+        },
+        "approximate_search": {
+          "type": "boolean"
+        },
+        "retained_prefix_log_mass": {
+          "anyOf": [
+            {
+              "type": "number",
+              "maximum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0,
+          "maxItems": 100
+        },
+        "failure_reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elapsed_ms": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "empty_prefix_log_mass": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "maximum": 0
+        },
+        "reranker_filtered_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "candidates": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "candidates": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VPA 0.1 observable-feature baseline",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "vocabulary_version",
+    "clip_id",
+    "source_fps",
+    "provenance",
+    "frames",
+    "gestures",
+    "teacher_labels",
+    "phoneme_hypotheses",
+    "summary"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vpa-0.1"
+    },
+    "vocabulary_version": {
+      "const": "arpabet-ipa-en-0.1"
+    },
+    "clip_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_fps": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "time_ms",
+          "features",
+          "quality",
+          "landmarks"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "time_ms": {
+            "type": "number",
+            "minimum": 0
+          },
+          "features": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "inner_aperture",
+              "outer_aperture",
+              "mouth_width",
+              "width_to_height",
+              "rounding",
+              "bilabial_contact",
+              "opening_velocity",
+              "landmark_speed"
+            ],
+            "properties": {
+              "inner_aperture": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "outer_aperture": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "mouth_width": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "width_to_height": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "rounding": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bilabial_contact": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "opening_velocity": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "landmark_speed": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "quality": {
+            "type": "object",
+            "required": [
+              "status",
+              "tracking_confidence",
+              "occluded"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "observed",
+                  "missing"
+                ]
+              },
+              "tracking_confidence": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "occluded": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "landmarks": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "gestures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "token",
+          "start_ms",
+          "end_ms",
+          "confidence",
+          "method",
+          "phoneme_candidates",
+          "compatible_arpabet",
+          "unobservable"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "enum": [
+              "BCL",
+              "BCL-REL",
+              "RND",
+              "OPEN",
+              "UNK-VIS"
+            ]
+          },
+          "start_ms": {
+            "type": "number",
+            "minimum": 0
+          },
+          "end_ms": {
+            "type": "number",
+            "minimum": 0
+          },
+          "confidence": {
+            "type": "null"
+          },
+          "method": {
+            "const": "geometry-thresholds-0.1"
+          },
+          "phoneme_candidates": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "compatible_arpabet": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "P",
+                "B",
+                "M"
+              ]
+            }
+          },
+          "unobservable": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "teacher_labels": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "phoneme_hypotheses": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "frame_count",
+        "observed_fraction"
+      ],
+      "properties": {
+        "frame_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "observed_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

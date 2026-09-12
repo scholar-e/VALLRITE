@@ -1,0 +1,451 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phoneme decoder request 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "request_id",
+    "kind",
+    "vocabulary",
+    "probabilities",
+    "step_times_ms",
+    "observed_steps",
+    "producer",
+    "calibration",
+    "resources",
+    "search",
+    "scoring"
+  ],
+  "properties": {
+    "schema": {
+      "const": "phoneme-decoder-request-0.1"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "const": "ctc_probabilities"
+    },
+    "vocabulary": {
+      "const": [
+        "<blank>",
+        "AA",
+        "AE",
+        "AH",
+        "AO",
+        "AW",
+        "AY",
+        "B",
+        "CH",
+        "D",
+        "DH",
+        "EH",
+        "ER",
+        "EY",
+        "F",
+        "G",
+        "HH",
+        "IH",
+        "IY",
+        "JH",
+        "K",
+        "L",
+        "M",
+        "N",
+        "NG",
+        "OW",
+        "OY",
+        "P",
+        "R",
+        "S",
+        "SH",
+        "T",
+        "TH",
+        "UH",
+        "UW",
+        "V",
+        "W",
+        "Y",
+        "Z",
+        "ZH"
+      ]
+    },
+    "probabilities": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "minItems": 40,
+        "maxItems": 40
+      },
+      "minItems": 0,
+      "maxItems": 10000
+    },
+    "step_times_ms": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
+          "minItems": 0,
+          "maxItems": 10000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "observed_steps": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          },
+          "minItems": 0,
+          "maxItems": 10000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "preprocessing",
+        "valid_steps",
+        "truncated_input"
+      ],
+      "properties": {
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "sha256"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "preprocessing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "sha256"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "valid_steps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "truncated_input": {
+          "type": "boolean"
+        }
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "temperature",
+        "artifact"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "raw_softmax",
+            "temperature_scaled"
+          ]
+        },
+        "temperature": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "artifact": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "sha256"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "raw_softmax"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "temperature": {
+                "const": 1
+              },
+              "artifact": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "artifact": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lexicon",
+        "language_model",
+        "reranker"
+      ],
+      "properties": {
+        "lexicon": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "sha256"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "language_model": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "sha256"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reranker": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "sha256"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phone_beam",
+        "lexical_beam",
+        "nbest",
+        "max_words"
+      ],
+      "properties": {
+        "phone_beam": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        },
+        "lexical_beam": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "nbest": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "max_words": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pronunciation_weight",
+        "lm_weight",
+        "word_insertion_bonus",
+        "reranker_weight",
+        "visual_score_window"
+      ],
+      "properties": {
+        "pronunciation_weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "lm_weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "word_insertion_bonus": {
+          "type": "number",
+          "maximum": 100,
+          "minimum": -100
+        },
+        "reranker_weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "visual_score_window": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "resources": {
+            "properties": {
+              "language_model": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "scoring": {
+            "properties": {
+              "lm_weight": {
+                "const": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "resources": {
+            "properties": {
+              "reranker": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "scoring": {
+            "properties": {
+              "reranker_weight": {
+                "const": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

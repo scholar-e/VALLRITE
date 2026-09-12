@@ -1,0 +1,25 @@
+{
+  "description": "Two official GRID demonstration clips, not a held-out benchmark. References are broad, stress-free English dictionary phonemes derived from published word transcripts, not manually aligned phone labels. A is the spoken letter name EY.",
+  "source": "https://spandh.dcs.shef.ac.uk/gridcorpus/",
+  "terms": "Freely available for research use on the official corpus page; media not redistributed in source control.",
+  "clips": [
+    {
+      "id": "id2_vcd_swwp2s",
+      "speaker": "2",
+      "video_url": "https://spandh.dcs.shef.ac.uk/gridcorpus/examples/id2_vcd_swwp2s.mpg",
+      "transcript_url": "https://spandh.dcs.shef.ac.uk/gridcorpus/examples/swwp2s.align",
+      "transcript": "set white with P two soon",
+      "reference": "S EH T W AY T W IH DH P IY T UW S UW N",
+      "reference_alternatives": ["S EH T W AY T W IH TH P IY T UW S UW N", "S EH T HH W AY T W IH DH P IY T UW S UW N", "S EH T HH W AY T W IH TH P IY T UW S UW N"]
+    },
+    {
+      "id": "id23_vcd_priazn",
+      "speaker": "23",
+      "video_url": "https://spandh.dcs.shef.ac.uk/gridcorpus/examples/id23_vcd_priazn.mpg",
+      "transcript_url": "https://spandh.dcs.shef.ac.uk/gridcorpus/examples/priazn.align",
+      "transcript": "place red in A zero now",
+      "reference": "P L EY S R EH D IH N EY Z IH R OW N AW",
+      "reference_alternatives": ["P L EY S R EH D IH N EY Z IY R OW N AW"]
+    }
+  ]
+}
