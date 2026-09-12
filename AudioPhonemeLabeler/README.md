@@ -103,3 +103,26 @@ cached weights the repeat run took about seven seconds. The local teacher cache 
 The 60% threshold is provisional and was not estimated from a representative
 corpus. Calibrate it on a separate, speaker-disjoint set with trusted transcripts
 before admitting a large external dataset.
+
+## Tongue-visibility review queue
+
+Audio phone intervals can locate frames worth reviewing, but they cannot label
+tongue visibility or position. Export a conservative review queue with:
+
+```bash
+.venv-vpa-gpu/bin/python -m AudioPhonemeLabeler.tongue_review \
+  datasets/audio-teacher-labels \
+  --output datasets/audio-teacher-labels/tongue-review.jsonl
+```
+
+The queue includes `TH`, `DH`, and `L` intervals from accepted and rejected
+source labels and preserves their status. Every row starts with
+`tongue_visibility: null` and `admit_to_training: false`. Use `--accepted-only`
+to produce the stricter audit subset, but still require visual review before
+changing either field.
+
+The first expansion start processed the previously materialized AVSpeech clip
+and two original GRID smoke videos. One GRID control was accepted at quality
+0.929; the AVSpeech clip and new GRID speaker 23 were rejected for low acoustic
+phone agreement. No rejected item was admitted, so this pass adds infrastructure
+and a review queue but no genuinely new speaker to visual training yet.

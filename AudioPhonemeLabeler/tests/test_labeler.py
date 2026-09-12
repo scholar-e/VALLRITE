@@ -12,6 +12,7 @@ from AudioPhonemeLabeler.core import (
 )
 from AudioPhonemeLabeler.__main__ import cmudict_pronunciation
 from AudioPhonemeLabeler.phones import map_ipa_tokens
+from AudioPhonemeLabeler.tongue_review import review_records
 from VisualPhoneme.data import phoneme_target
 
 
@@ -88,6 +89,19 @@ class AudioPhonemeLabelerTests(unittest.TestCase):
         use_forced_alignment(document, forced, "MFA test")
         self.assertEqual(document["tiers"]["phones"]["entries"][0][:2], [0.1, 0.2])
         self.assertEqual(document["provenance"]["phone_timing"], "MFA test")
+
+    def test_tongue_review_requires_explicit_human_label(self):
+        document = {
+            "label_status": "accepted",
+            "provenance": {"source": "clip.mp4"},
+            "tiers": {"phones": {"entries": [
+                [0.0, 0.1, "B"], [0.1, 0.2, "DH"], [0.2, 0.3, "L"],
+            ]}},
+        }
+        records = review_records(document, Path("alignment.json"))
+        self.assertEqual([record["phone"] for record in records], ["DH", "L"])
+        self.assertTrue(all(record["tongue_visibility"] is None for record in records))
+        self.assertTrue(all(not record["admit_to_training"] for record in records))
 
     @patch("AudioPhonemeLabeler.alignment.shutil.which",
            return_value="/usr/bin/mfa")
