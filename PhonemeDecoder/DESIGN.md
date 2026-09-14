@@ -264,6 +264,21 @@ prose top-k values. Its CMUdict LoRA adapter was trained on individual dictionar
 words, not uncertain sentence lattices. Reuse checkpoint-loading machinery for
 an experiment, not its output contract as a production decoder.
 
+Qwen3.5-2B is the research proof-of-concept reranker, not the intended mobile
+model. The mobile learned reranker is a two-layer word-level GRU with tied input
+and output embeddings, trained on the same candidate-ranking records and
+exported as int8. Its vocabulary comes from the immutable decoder lexicon and
+must include explicit BOS, EOS, and unknown tokens. Start with hidden and
+embedding width 256; record its serialized size, peak memory, latency, and energy
+on the target phone. It uses the same candidate-only boundary, EOS convention,
+visual-score window, and failure fallback as Qwen.
+
+Keep and compare three final systems on identical frozen emissions: lexical
+decoder without a learned reranker, Qwen3.5-2B, and the compact GRU. Tune weights
+on selection speakers, then report WER and resource measurements together after
+both learned models are trained. Do not use intermediate training checkpoints to
+choose a system from test-set WER.
+
 Proposed integration scores only enumerated complete word candidates. Use a
 fixed prompt and teacher-forced candidate-token log likelihood, including one
 EOS and a versioned token-length normalization convention. Treat that as a

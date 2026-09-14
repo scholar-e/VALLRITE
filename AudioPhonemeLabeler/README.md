@@ -2,15 +2,18 @@
 
 This package creates audibly supervised ARPAbet labels for silent-video model
 training. Its hybrid mode runs one or more large Whisper teachers for text,
-Montreal Forced Aligner (MFA) for phone boundaries, and a direct Wav2Vec2 phone
-recognizer as an independent acoustic check. Output uses the same
+Montreal Forced Aligner (MFA) or a local transcript-constrained CTC aligner for
+phone boundaries, and a direct Wav2Vec2 phone recognizer as an independent
+acoustic check. Output uses the same
 `tiers.phones.entries` alignment contract as the current GRID pipeline.
 
-This is a machine-label pipeline, not ground truth. If MFA is unavailable or
-fails, the fallback subdivides each Whisper word interval uniformly among its
-CMUdict phonemes and records that approximation. The visual CTC trainer currently
-consumes only phoneme order, so provisional internal boundaries do not enter its
-loss.
+This is a machine-label pipeline, not ground truth. When MFA is unavailable, the
+local aligner uses a Viterbi CTC trellis to constrain Wav2Vec2 acoustic emissions
+to the transcript's CMUdict phone sequence. Blank frames may occur between
+phones, every target phone must occupy an acoustic frame, and identical adjacent
+phones require an intervening blank. If all forced aligners are disabled or fail,
+the final fallback subdivides each Whisper word interval uniformly and records
+that approximation.
 
 The direct model emits multilingual IPA-like labels. A conservative checked-in
 mapping converts common English phones to the visual model's 39-phone ARPAbet
@@ -48,6 +51,16 @@ A practical single-teacher pass uses Whisper large-v3-turbo:
   --compute-type float16 --output-dir datasets/audio-teacher-labels
 ```
 
+Require locally available acoustic phone boundaries without installing MFA:
+
+```bash
+tools/with-vpa-gpu .venv-vpa-gpu/bin/python -m AudioPhonemeLabeler \
+  path/to/media --teacher large-v3-turbo --device cuda \
+  --compute-type float16 --phone-teacher-mode off \
+  --ctc-align-mode required --mfa-mode off \
+  --output-dir datasets/audio-teacher-labels
+```
+
 Hybrid stages default to `preferred`: failures retain an auditable fallback.
 For dataset production, require all three paths:
 
@@ -55,6 +68,7 @@ For dataset production, require all three paths:
 .venv-vpa-gpu/bin/python -m AudioPhonemeLabeler \
   path/to/media --teacher large-v3-turbo --device cuda \
   --compute-type float16 --phone-teacher-mode required --mfa-mode required \
+  --ctc-align-mode preferred \
   --mfa-dictionary english_us_arpa --mfa-acoustic-model english_us_arpa \
   --output-dir datasets/audio-teacher-labels
 ```
@@ -81,8 +95,12 @@ Teacher weights share `OUTPUT_DIR/.model-cache` by default. Override this with
 MFA is intentionally an external dependency because its supported installation
 is separate from the Python inference environment. Install MFA, download the
 `english_us_arpa` acoustic model and dictionary, and confirm `mfa` is on `PATH`.
-Use `--mfa-mode off` for sequence-only experiments. Similarly,
-`--phone-teacher-mode off` disables the direct acoustic check.
+When both forced aligners succeed, MFA is the final timing source. Use
+`--mfa-mode off --ctc-align-mode off` for sequence-only experiments. The CTC
+aligner shares the Wav2Vec2 model used for direct phone recognition, but is not
+an independent correctness check because its target is constrained. Setting
+`--phone-teacher-mode off` disables the unconstrained agreement check without
+disabling CTC alignment.
 
 ## Admission policy
 
@@ -103,6 +121,11 @@ cached weights the repeat run took about seven seconds. The local teacher cache 
 The 60% threshold is provisional and was not estimated from a representative
 corpus. Calibrate it on a separate, speaker-disjoint set with trusted transcripts
 before admitting a large external dataset.
+
+The local CTC forced aligner was also exercised on LRS3 clip
+`00j9bKdiOjk/50001.mp4`: it aligned 69 transcript phones at approximately 20 ms
+resolution, recorded path confidence 0.887, and marked forced alignment complete.
+This is an execution and schema smoke test, not a boundary-accuracy benchmark.
 
 ## Tongue-visibility review queue
 

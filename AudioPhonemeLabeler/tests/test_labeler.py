@@ -8,10 +8,10 @@ from unittest.mock import patch
 from AudioPhonemeLabeler.alignment import MontrealForcedAligner
 from AudioPhonemeLabeler.core import (
     TeacherTranscript, Word, add_acoustic_evidence, build_alignment,
-    select_consensus, use_forced_alignment,
+    phone_intervals_to_alignment, select_consensus, use_forced_alignment,
 )
 from AudioPhonemeLabeler.__main__ import cmudict_pronunciation
-from AudioPhonemeLabeler.phones import map_ipa_tokens
+from AudioPhonemeLabeler.phones import ctc_viterbi_align, map_ipa_tokens
 from AudioPhonemeLabeler.tongue_review import review_records
 from VisualPhoneme.data import phoneme_target
 
@@ -59,6 +59,8 @@ class AudioPhonemeLabelerTests(unittest.TestCase):
 
     def test_real_cmudict_dependency(self):
         self.assertEqual(cmudict_pronunciation("blue"), ["B", "L", "UW1"])
+        self.assertEqual(cmudict_pronunciation("gdp"),
+                         ["G", "IY1", "D", "IY1", "P", "IY1"])
 
     def test_direct_ipa_mapping_and_acoustic_rejection(self):
         direct = map_ipa_tokens(["b", "l", "uː", "?unmapped?"])
@@ -89,6 +91,50 @@ class AudioPhonemeLabelerTests(unittest.TestCase):
         use_forced_alignment(document, forced, "MFA test")
         self.assertEqual(document["tiers"]["phones"]["entries"][0][:2], [0.1, 0.2])
         self.assertEqual(document["provenance"]["phone_timing"], "MFA test")
+
+    def test_ctc_viterbi_alignment_produces_acoustic_intervals(self):
+        import torch
+
+        logits = torch.full((7, 3), -8.0)
+        for frame, token in enumerate((0, 1, 1, 0, 2, 2, 0)):
+            logits[frame, token] = 0.0
+        forced = ctc_viterbi_align(
+            logits.log_softmax(dim=-1), [[1], [2]], ["P", "B"], 0, 0.7
+        )
+        self.assertEqual([entry[2] for entry in forced.entries], ["P", "B"])
+        for actual, expected in zip(
+                [value for entry in forced.entries for value in entry[:2]],
+                [0.1, 0.3, 0.4, 0.6]):
+            self.assertAlmostEqual(actual, expected)
+        self.assertGreater(forced.path_confidence, 0.99)
+        self.assertAlmostEqual(forced.frame_duration, 0.1)
+
+    def test_ctc_alignment_reconstructs_word_boundaries(self):
+        transcript = TeacherTranscript("teacher", "en", 1.0, (
+            Word("blue", 0.0, 0.4, 1.0), Word("bat", 0.4, 0.8, 1.0),
+        ))
+        lexicon = {"blue": ["B", "L", "UW1"], "bat": ["B", "AE1", "T"]}
+        document = build_alignment(transcript, 1.0,
+                                   lambda word: lexicon[word], {}, min_quality=0.0)
+        entries = [(0.08, 0.14, "B"), (0.14, 0.22, "L"),
+                   (0.22, 0.38, "UW"), (0.43, 0.50, "B"),
+                   (0.50, 0.66, "AE"), (0.66, 0.76, "T")]
+        forced = phone_intervals_to_alignment(document, entries, 0.75)
+        self.assertEqual(forced["tiers"]["words"]["entries"],
+                         [[0.08, 0.38, "blue"], [0.43, 0.76, "bat"]])
+        self.assertEqual(forced["confidence"], 0.75)
+
+    def test_ctc_viterbi_separates_repeated_phones_with_blank(self):
+        import torch
+
+        logits = torch.full((5, 2), -8.0)
+        for frame, token in enumerate((0, 1, 0, 1, 0)):
+            logits[frame, token] = 0.0
+        forced = ctc_viterbi_align(
+            logits.log_softmax(dim=-1), [[1], [1]], ["T", "T"], 0, 0.5
+        )
+        self.assertAlmostEqual(forced.entries[0][1], 0.2)
+        self.assertAlmostEqual(forced.entries[1][0], 0.3)
 
     def test_tongue_review_requires_explicit_human_label(self):
         document = {

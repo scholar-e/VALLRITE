@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import os
 from pathlib import Path
+import re
 
 
 # Deliberately conservative: unmapped multilingual tokens lower confidence.
@@ -30,6 +32,104 @@ class DirectPhones:
     raw: tuple[str, ...]
     arpabet: tuple[str, ...]
     mapping_coverage: float
+
+
+@dataclass(frozen=True)
+class ForcedPhones:
+    """Transcript-constrained phone intervals from a CTC acoustic model."""
+
+    model: str
+    entries: tuple[tuple[float, float, str], ...]
+    path_confidence: float
+    frame_duration: float
+
+
+def ctc_viterbi_align(log_probs, target_token_ids: list[list[int]],
+                      target_phones: list[str], blank_id: int,
+                      duration: float) -> ForcedPhones:
+    """Find the highest-scoring CTC path through a fixed phone sequence.
+
+    Each target phone may be represented by several IPA vocabulary tokens. Their
+    probabilities are summed before alignment, while blank absorbs silence and
+    non-phone frames. This function is model-independent and directly testable.
+    """
+    import torch
+
+    if log_probs.ndim != 2 or log_probs.shape[0] < 1:
+        raise ValueError("log_probs must have shape [frames,vocabulary]")
+    if len(target_token_ids) != len(target_phones) or not target_phones:
+        raise ValueError("target phone/token groups must be nonempty and equal length")
+    if not 0 <= blank_id < log_probs.shape[1]:
+        raise ValueError("blank token is outside the acoustic vocabulary")
+    if duration <= 0 or log_probs.shape[0] < len(target_phones):
+        raise ValueError("audio has insufficient frames for the target phone sequence")
+    vocabulary = log_probs.shape[1]
+    if any(not ids or any(token < 0 or token >= vocabulary for token in ids)
+           for ids in target_token_ids):
+        raise ValueError("every target phone requires valid acoustic token IDs")
+
+    scores = log_probs.detach().to(device="cpu", dtype=torch.float32)
+    phone_scores = torch.stack([
+        torch.logsumexp(scores[:, ids], dim=1) for ids in target_token_ids
+    ], dim=1)
+    frames = scores.shape[0]
+    states = 2 * len(target_phones) + 1
+    emissions = scores.new_empty((frames, states))
+    emissions[:, 0::2] = scores[:, blank_id].unsqueeze(1)
+    emissions[:, 1::2] = phone_scores
+
+    negative_infinity = torch.tensor(float("-inf"), dtype=scores.dtype)
+    previous = torch.full((states,), negative_infinity, dtype=scores.dtype)
+    previous[0] = emissions[0, 0]
+    if states > 1:
+        previous[1] = emissions[0, 1]
+    backpointers = torch.zeros((frames, states), dtype=torch.int8)
+    for frame in range(1, frames):
+        stay = previous
+        advance = torch.cat((negative_infinity.view(1), previous[:-1]))
+        skip = torch.cat((negative_infinity.repeat(2), previous[:-2]))
+        # A two-state skip enters a phone state. CTC forbids that transition
+        # when it would join two identical adjacent labels without a blank.
+        skip_allowed = torch.zeros(states, dtype=torch.bool)
+        for phone_index in range(1, len(target_phones)):
+            state = 2 * phone_index + 1
+            if target_phones[phone_index] != target_phones[phone_index - 1]:
+                skip_allowed[state] = True
+        skip = torch.where(skip_allowed, skip, negative_infinity)
+        candidates = torch.stack((stay, advance, skip))
+        best_scores, transitions = candidates.max(dim=0)
+        previous = best_scores + emissions[frame]
+        backpointers[frame] = transitions.to(torch.int8)
+
+    end_candidates = [states - 1]
+    if states > 1:
+        end_candidates.append(states - 2)
+    end_state = max(end_candidates, key=lambda state: float(previous[state]))
+    final_score = float(previous[end_state])
+    if not math.isfinite(final_score):
+        raise ValueError("no valid CTC alignment path for the target phones")
+    path = [end_state]
+    for frame in range(frames - 1, 0, -1):
+        end_state -= int(backpointers[frame, end_state])
+        path.append(end_state)
+    path.reverse()
+
+    seconds_per_frame = duration / frames
+    entries = []
+    for phone_index, phone in enumerate(target_phones):
+        state = 2 * phone_index + 1
+        occupied = [frame for frame, path_state in enumerate(path)
+                    if path_state == state]
+        if not occupied:
+            raise ValueError(f"CTC path omitted target phone {phone_index}: {phone}")
+        entries.append((occupied[0] * seconds_per_frame,
+                        (occupied[-1] + 1) * seconds_per_frame, phone))
+    return ForcedPhones(
+        model="",
+        entries=tuple(entries),
+        path_confidence=math.exp(final_score / frames),
+        frame_duration=seconds_per_frame,
+    )
 
 
 def map_ipa_tokens(tokens: list[str]) -> DirectPhones:
@@ -70,7 +170,8 @@ class Wav2Vec2PhoneTeacher:
             model_name, local_files_only=local_files_only, cache_dir=cache_dir
         ).to(self.device).eval()
 
-    def recognize(self, wav_path: Path) -> DirectPhones:
+    def _infer(self, wav_path: Path):
+        """Return CPU log probabilities and duration for normalized PCM audio."""
         import wave
 
         import numpy as np
@@ -80,12 +181,48 @@ class Wav2Vec2PhoneTeacher:
             if wav.getnchannels() != 1 or wav.getframerate() != 16000 \
                     or wav.getsampwidth() != 2:
                 raise ValueError("phone teacher requires mono 16 kHz PCM16 WAV")
-            audio = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+            frames = wav.getnframes()
+            audio = np.frombuffer(wav.readframes(frames), dtype="<i2")
         inputs = self.processor(audio.astype(np.float32) / 32768.0,
                                 sampling_rate=16000, return_tensors="pt")
-        input_values = inputs.input_values.to(self.device)
         with torch.inference_mode():
-            predicted = self.model(input_values).logits.argmax(dim=-1)
+            logits = self.model(inputs.input_values.to(self.device)).logits
+            log_probs = logits.log_softmax(dim=-1).cpu()[0]
+        return log_probs, frames / 16000.0
+
+    def recognize(self, wav_path: Path) -> DirectPhones:
+        log_probs, _ = self._infer(wav_path)
+        predicted = log_probs.argmax(dim=-1).unsqueeze(0)
         text = self.processor.batch_decode(predicted.cpu())[0]
         result = map_ipa_tokens(text.split())
         return DirectPhones(self.name, result.raw, result.arpabet, result.mapping_coverage)
+
+    def recognize_and_align(self, wav_path: Path, target_phones: list[str]
+                            ) -> tuple[DirectPhones, ForcedPhones]:
+        """Recognize freely and force-align a known ARPAbet sequence in one pass."""
+        log_probs, duration = self._infer(wav_path)
+        predicted = log_probs.argmax(dim=-1).unsqueeze(0)
+        text = self.processor.batch_decode(predicted)[0]
+        mapped = map_ipa_tokens(text.split())
+        direct = DirectPhones(self.name, mapped.raw, mapped.arpabet,
+                              mapped.mapping_coverage)
+        vocabulary = self.processor.tokenizer.get_vocab()
+        ids_by_phone: dict[str, list[int]] = {}
+        for token, token_id in vocabulary.items():
+            arpabet = IPA_TO_ARPABET.get(token)
+            if arpabet:
+                ids_by_phone.setdefault(arpabet, []).append(int(token_id))
+        normalized = [re.sub(r"\d", "", phone).upper() for phone in target_phones]
+        missing = sorted({phone for phone in normalized if phone not in ids_by_phone})
+        if missing:
+            raise ValueError(f"acoustic vocabulary cannot represent phones: {missing}")
+        forced = ctc_viterbi_align(
+            log_probs, [ids_by_phone[phone] for phone in normalized],
+            normalized, int(self.processor.tokenizer.pad_token_id), duration,
+        )
+        stress_preserving_entries = tuple(
+            (start, end, original)
+            for (start, end, _), original in zip(forced.entries, target_phones)
+        )
+        return direct, ForcedPhones(self.name, stress_preserving_entries,
+                                    forced.path_confidence, forced.frame_duration)

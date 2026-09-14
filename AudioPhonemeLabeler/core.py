@@ -96,6 +96,52 @@ def use_forced_alignment(document: dict, forced: dict, aligner: str) -> None:
     document["quality"]["forced_alignment"] = "complete"
 
 
+def phone_intervals_to_alignment(document: dict,
+                                 phone_entries: Sequence[Sequence[float | str]],
+                                 confidence: float | None = None) -> dict:
+    """Build word and phone tiers from ordered forced phone intervals.
+
+    Provisional within-word phones determine only how many aligned phones belong
+    to each word. Acoustic boundaries determine the replacement word intervals.
+    """
+    original_words = document["tiers"]["words"]["entries"]
+    original_phones = document["tiers"]["phones"]["entries"]
+    aligned = [[float(start), float(end), str(phone)]
+               for start, end, phone in phone_entries]
+    if len(aligned) != len(original_phones):
+        raise ValueError("forced phone count does not match transcript target")
+    if any(end <= start for start, end, _ in aligned):
+        raise ValueError("forced phone intervals must have positive duration")
+    words = []
+    offset = 0
+    tolerance = 1e-6
+    for word_start, word_end, word in original_words:
+        count = sum(float(phone_start) >= float(word_start) - tolerance
+                    and float(phone_end) <= float(word_end) + tolerance
+                    for phone_start, phone_end, _ in original_phones)
+        if count:
+            group = aligned[offset:offset + count]
+            if len(group) != count:
+                raise ValueError("forced phone sequence ended inside a word")
+            words.append([group[0][0], group[-1][1], str(word)])
+            offset += count
+        else:
+            words.append([float(word_start), float(word_end), str(word)])
+    if offset != len(aligned):
+        raise ValueError("transcript phone tiers could not be assigned to words")
+    result = {
+        "start": 0.0,
+        "end": max(float(document["end"]), aligned[-1][1]),
+        "tiers": {
+            "words": {"type": "interval", "entries": words},
+            "phones": {"type": "interval", "entries": aligned},
+        },
+    }
+    if confidence is not None:
+        result["confidence"] = float(confidence)
+    return result
+
+
 def select_consensus(transcripts: Sequence[TeacherTranscript]) -> tuple[TeacherTranscript, float]:
     """Return the transcript medoid and mean pairwise agreement with it."""
     if not transcripts:

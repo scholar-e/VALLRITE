@@ -1,11 +1,14 @@
 import json
 from pathlib import Path
+import pickle
 import tempfile
 import unittest
 
+import numpy as np
 import torch
 
-from VisualPhoneme.data import (GridClips, ctc_prefix_beam_search,
+from VisualPhoneme.data import (GridClips, collate_aligned_landmark_clips,
+                                      ctc_prefix_beam_search,
                                       fit_bigram_log_probs, greedy_decode,
                                       load_video, normalize_phone, phoneme_target,
                                       transform_landmarks)
@@ -13,11 +16,90 @@ from VisualPhoneme.model import (CompactFusionVisualPhoneme,
                                        CompactGatedFusionVisualPhoneme,
                                        CompactLandmarkPhoneme,
                                        CompactTongueGatedFusionVisualPhoneme,
-                                       CompactVisualPhoneme)
-from VisualPhoneme.train import edit_totals
+                                       CompactVisualPhoneme,
+                                       LargeGatedFusionVisualPhoneme)
+from VisualPhoneme.lrs3_data import (LRS3_LANDMARK_POINTS, Lrs3Clips,
+                                     eye_normalize_lrs3, load_lrs3_landmarks)
+from VisualPhoneme.train import edit_totals, upsample_ctc_logits
+from VisualPhoneme.visemes import (PHONE_TO_VISUAL_GROUP, VISUAL_PHONE_GROUPS,
+                                   PHONE_ID_TO_VISUAL_GROUP_ID, VISUAL_GROUPS,
+                                   visual_group_alternatives,
+                                   visual_phone_alternatives)
 
 
 class VisualPhonemeTests(unittest.TestCase):
+    def test_lrs3_landmarks_preserve_missing_frames_and_normalize(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "landmarks.pkl"
+            frames = [np.arange(136, dtype=np.float32).reshape(68, 2), None]
+            with path.open("wb") as output:
+                pickle.dump(frames, output, protocol=3)
+            loaded = load_lrs3_landmarks(path)
+            self.assertEqual(loaded.shape, (2, LRS3_LANDMARK_POINTS, 2))
+            self.assertTrue(np.isnan(loaded[1]).all())
+            normalized = eye_normalize_lrs3(torch.from_numpy(loaded))
+            self.assertTrue(torch.isfinite(normalized[0]).all())
+            self.assertTrue(torch.isnan(normalized[1]).all())
+
+    def test_lrs3_test_manifest_loads_materialized_mouth_video(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "manifests").mkdir()
+            (root / "test-video").mkdir()
+            video = np.arange(4 * 12 * 12, dtype=np.uint8).reshape(4, 12, 12)
+            with (root / "test-video/00000.npy").open("wb") as output:
+                np.save(output, video, allow_pickle=False)
+            row = {"clip_id": "lrs3:test/00000", "source_type": "npy-mouth",
+                   "video": "test-video/00000.npy", "landmarks": None,
+                   "frames": 4, "phonemes": ["B", "IY"]}
+            (root / "manifests/test.jsonl").write_text(json.dumps(row) + "\n")
+            dataset = Lrs3Clips(root, "test", size=16, crop="mouth")
+            loaded, target, clip_id = dataset[0]
+            self.assertEqual(loaded.shape, (4, 1, 16, 16))
+            self.assertEqual(target.tolist(), [7, 18])
+            self.assertEqual(clip_id, "lrs3:test/00000")
+
+    def test_lrs3_teacher_words_expand_into_short_training_chunks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "manifests").mkdir()
+            labels = root / "teacher"
+            labels.mkdir()
+            video = root / "raw/trainval/talk/50001.mp4"
+            video.parent.mkdir(parents=True)
+            video.touch()
+            row = {"clip_id": "lrs3:trainval/talk/50001", "source_type": "video",
+                   "video": "raw/trainval/talk/50001.mp4", "landmarks": None,
+                   "frames": 50, "fps": 25, "transcript": "the cat sat",
+                   "phonemes": ["DH", "AH", "K", "AE", "T", "S", "AE", "T"]}
+            (root / "manifests/train.jsonl").write_text(json.dumps(row) + "\n")
+            alignment = labels / "sample.json"
+            alignment.write_text(json.dumps({
+                "label_status": "accepted",
+                "provenance": {"teacher_transcripts": [["the", "cat", "sat"]]},
+                "tiers": {
+                    "words": {"entries": [[0, 0.5, "the"], [0.5, 1.1, "cat"],
+                                             [1.1, 1.8, "sat"]]},
+                    "phones": {"entries": [[0, .25, "DH"], [.25, .5, "AH"],
+                                              [.5, .7, "K"], [.7, .9, "AE"],
+                                              [.9, 1.1, "T"], [1.1, 1.3, "S"],
+                                              [1.3, 1.55, "AE"], [1.55, 1.8, "T"]]},
+                },
+            }))
+            (labels / "labels.jsonl").write_text(json.dumps({
+                "source": str(video.resolve()), "alignment": str(alignment),
+                "status": "accepted",
+            }) + "\n")
+            dataset = Lrs3Clips(root, "train", include_video=True,
+                                teacher_labels_dir=labels, max_chunk_phones=5,
+                                include_frame_targets=True)
+            self.assertEqual(len(dataset), 2)
+            self.assertEqual(dataset.rows[0]["phonemes"], ["DH", "AH", "K", "AE", "T"])
+            self.assertEqual(dataset.rows[1]["phonemes"], ["S", "AE", "T"])
+            self.assertEqual(dataset.rows[0]["source_clip_id"], row["clip_id"])
+            self.assertEqual(len(dataset.rows[0]["frame_phone_ids"]),
+                             dataset.rows[0]["frames"])
+
     def test_model_preserves_time_and_is_small(self):
         model = CompactVisualPhoneme()
         output = model(torch.zeros(2, 9, 1, 64, 64))
@@ -56,6 +138,36 @@ class VisualPhonemeTests(unittest.TestCase):
                        mask.repeat(2, 1))
         self.assertEqual(output.shape, (6, 2, 40))
         self.assertLess(model.image_gate, 0.05)
+
+    def test_large_fusion_is_separate_and_near_ten_million_parameters(self):
+        model = LargeGatedFusionVisualPhoneme(
+            landmark_points=68, coordinate_dimensions=10, landmark_bottleneck=128,
+        )
+        video = torch.zeros(1, 4, 1, 64, 64)
+        landmarks = torch.zeros(1, 4, 68, 10)
+        mask = torch.ones(1, 4, dtype=torch.bool)
+        output = model(video, landmarks, mask)
+        self.assertEqual(output.shape, (4, 1, 40))
+        self.assertTrue(torch.isfinite(output).all())
+        self.assertGreater(model.parameter_count, 9_000_000)
+        self.assertLess(model.parameter_count, 11_000_000)
+
+    def test_visual_groups_partition_phones_and_expand_all_members(self):
+        from VisualPhoneme.data import PHONEMES
+        members = [phone for group in VISUAL_PHONE_GROUPS.values() for phone in group]
+        self.assertEqual(set(members), set(PHONEMES))
+        self.assertEqual(len(members), len(set(members)))
+        alternatives = visual_phone_alternatives(["P", "V", "TH"])
+        self.assertEqual(alternatives[0]["possible_phonemes"], ["B", "M", "P"])
+        self.assertEqual(alternatives[1]["possible_phonemes"], ["F", "V"])
+        self.assertEqual(alternatives[2]["possible_phonemes"], ["DH", "TH"])
+        self.assertEqual(PHONE_TO_VISUAL_GROUP["P"], "lip-closure")
+        self.assertEqual(len(VISUAL_GROUPS), 17)
+        self.assertEqual(len(PHONE_ID_TO_VISUAL_GROUP_ID), 40)
+        self.assertEqual(
+            visual_group_alternatives(["lip-closure"])[0]["possible_phonemes"],
+            ["B", "M", "P"],
+        )
 
     def test_inner_mouth_branch_is_observability_gated(self):
         model = CompactTongueGatedFusionVisualPhoneme(
@@ -115,6 +227,16 @@ class VisualPhonemeTests(unittest.TestCase):
         logits = torch.full((5, 2, 40), -10.0)
         logits.scatter_(2, ids.unsqueeze(-1), 10.0)
         self.assertEqual(greedy_decode(logits, torch.tensor([5, 4])), [[1, 1], [2, 3]])
+
+    def test_ctc_temporal_upsampling_repeats_emissions_and_lengths(self):
+        logits = torch.arange(3 * 2 * 4).reshape(3, 2, 4)
+        expanded, lengths = upsample_ctc_logits(logits, torch.tensor([3, 2]), 2)
+        self.assertEqual(expanded.shape, (6, 2, 4))
+        self.assertTrue(torch.equal(expanded[0], expanded[1]))
+        self.assertTrue(torch.equal(expanded[4], expanded[5]))
+        self.assertEqual(lengths.tolist(), [6, 4])
+        with self.assertRaisesRegex(ValueError, "must be positive"):
+            upsample_ctc_logits(logits, torch.tensor([3, 2]), 0)
 
     def test_ctc_prefix_beam_returns_ranked_sequences(self):
         logits = torch.tensor([[0.0, 5.0, 0.0],

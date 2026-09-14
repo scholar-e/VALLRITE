@@ -37,6 +37,26 @@ class TemporalBlock(nn.Module):
         return self.activation(inputs + self.layers(inputs))
 
 
+class LargeTemporalBlock(nn.Module):
+    """Higher-capacity residual temporal block for the 10M model family."""
+
+    def __init__(self, channels: int, dilation: int):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Conv1d(channels, channels, 3, padding=dilation,
+                      dilation=dilation, bias=False),
+            nn.BatchNorm1d(channels),
+            nn.SiLU(inplace=True),
+            nn.Conv1d(channels, channels, 3, padding=dilation,
+                      dilation=dilation, bias=False),
+            nn.BatchNorm1d(channels),
+        )
+        self.activation = nn.SiLU(inplace=True)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        return self.activation(inputs + self.layers(inputs))
+
+
 def frame_encoder(width: int) -> nn.Sequential:
     return nn.Sequential(
         ConvBlock(1, 16),
@@ -195,6 +215,72 @@ class CompactGatedFusionVisualPhoneme(nn.Module):
         geometry = self.landmark_encoder(torch.cat((coordinates, visibility), dim=1)) * visibility
         gate = self.image_gate_logit.sigmoid()
         encoded = geometry + gate * images
+        encoded = encoded.reshape(batch, steps, -1).transpose(1, 2)
+        return self.classifier(self.temporal(encoded).transpose(1, 2)).transpose(0, 1)
+
+    @property
+    def image_gate(self) -> float:
+        return float(self.image_gate_logit.detach().sigmoid())
+
+    @property
+    def parameter_count(self) -> int:
+        return sum(parameter.numel() for parameter in self.parameters())
+
+
+class LargeGatedFusionVisualPhoneme(nn.Module):
+    """Approximately 10M-parameter mouth/landmark CTC recognizer.
+
+    This is deliberately a separate family from the compact GRID models. It
+    preserves their input and time-major CTC output contracts without changing
+    any existing checkpoint shapes.
+    """
+
+    def __init__(self, classes: int = 40, width: int = 384,
+                 landmark_points: int = 41, coordinate_dimensions: int = 2,
+                 landmark_bottleneck: int | None = 128,
+                 image_gate_probability: float = 0.05):
+        super().__init__()
+        self.landmark_points = landmark_points
+        self.coordinate_dimensions = coordinate_dimensions
+        self.frame_encoder = nn.Sequential(
+            ConvBlock(1, 32), ConvBlock(32, 64), ConvBlock(64, 128),
+            ConvBlock(128, 192), nn.AdaptiveAvgPool2d(1),
+        )
+        self.image_projection = nn.Sequential(
+            nn.Linear(192, width), nn.LayerNorm(width), nn.SiLU(inplace=True),
+        )
+        self.landmark_encoder = landmark_encoder(
+            landmark_points, coordinate_dimensions, width, landmark_bottleneck,
+        )
+        self.image_gate_logit = nn.Parameter(
+            torch.tensor(probability_logit(image_gate_probability))
+        )
+        dilations = (1, 2, 4, 8, 16, 1, 2, 4, 8, 16)
+        self.temporal = nn.Sequential(
+            *(LargeTemporalBlock(width, dilation) for dilation in dilations)
+        )
+        self.classifier = nn.Linear(width, classes)
+
+    def forward(self, video: torch.Tensor, landmarks: torch.Tensor,
+                landmark_mask: torch.Tensor) -> torch.Tensor:
+        if video.ndim != 5 or video.shape[2] != 1:
+            raise ValueError("video must have shape [batch,time,1,height,width]")
+        expected = (self.landmark_points, self.coordinate_dimensions)
+        if landmarks.shape[:2] != video.shape[:2] or landmarks.shape[2:] != expected:
+            raise ValueError(f"landmarks must have trailing shape {expected}")
+        if landmark_mask.shape != video.shape[:2]:
+            raise ValueError("landmark_mask must have shape [batch,time]")
+        batch, steps, channels, height, width = video.shape
+        images = self.frame_encoder(
+            video.reshape(batch * steps, channels, height, width)
+        ).flatten(1)
+        images = self.image_projection(images)
+        visibility = landmark_mask.reshape(batch * steps, 1).to(landmarks.dtype)
+        coordinates = torch.nan_to_num(landmarks).reshape(batch * steps, -1)
+        geometry = self.landmark_encoder(
+            torch.cat((coordinates, visibility), dim=1)
+        ) * visibility
+        encoded = geometry + self.image_gate_logit.sigmoid() * images
         encoded = encoded.reshape(batch, steps, -1).transpose(1, 2)
         return self.classifier(self.temporal(encoded).transpose(1, 2)).transpose(0, 1)
 

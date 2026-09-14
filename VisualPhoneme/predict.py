@@ -17,7 +17,12 @@ from VisualPhoneme.model import (CompactFusionVisualPhoneme,
                                        CompactGatedFusionVisualPhoneme,
                                        CompactLandmarkPhoneme,
                                        CompactTongueGatedFusionVisualPhoneme,
-                                       CompactVisualPhoneme)
+                                       CompactVisualPhoneme,
+                                       LargeGatedFusionVisualPhoneme)
+from VisualPhoneme.train import upsample_ctc_logits
+from VisualPhoneme.visemes import (VISUAL_GROUPS, VISUAL_PHONE_GROUPS,
+                                   visual_group_alternatives,
+                                   visual_phone_alternatives)
 
 LOGGER = logging.getLogger("visual_phoneme.predict")
 
@@ -70,24 +75,34 @@ def main() -> None:
     device = torch.device(device_name)
     checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
     phones = tuple(checkpoint["phones"])
-    if phones != PHONEMES:
-        raise ValueError("checkpoint phoneme vocabulary does not match this code")
+    target_inventory = checkpoint.get("target_inventory", "phones")
+    expected_labels = PHONEMES if target_inventory == "phones" else VISUAL_GROUPS
+    if phones != expected_labels:
+        raise ValueError("checkpoint target vocabulary does not match this code")
+    expand = (visual_phone_alternatives if target_inventory == "phones"
+              else visual_group_alternatives)
+    if target_inventory == "visual-groups" and (args.emissions_output or args.word_lexicon):
+        parser.error("group checkpoints cannot use the 39-phone emission/lexicon decoder")
     crop_name = checkpoint["crop"]
     architecture = checkpoint.get("architecture", "image")
-    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"} and (
+    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
+                        "large-gated-fusion"} and (
             args.landmarks_npz is None or not args.landmarks_npz.is_file()):
         parser.error("a coordinate checkpoint requires an existing --landmarks-npz cache")
     model_classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
                      "fusion": CompactFusionVisualPhoneme,
                      "gated-fusion": CompactGatedFusionVisualPhoneme,
-                     "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme}
+                     "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme,
+                     "large-gated-fusion": LargeGatedFusionVisualPhoneme}
     model_args = {"classes": len(phones) + 1}
-    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"}:
+    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
+                        "large-gated-fusion"}:
         model_args["landmark_points"] = int(checkpoint["landmark_points"])
         model_args["coordinate_dimensions"] = int(checkpoint.get("coordinate_dimensions", 2))
-    if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion"}:
+    if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion",
+                        "large-gated-fusion"}:
         model_args["landmark_bottleneck"] = checkpoint.get("landmark_bottleneck")
-    if architecture in {"gated-fusion", "tongue-gated-fusion"}:
+    if architecture in {"gated-fusion", "tongue-gated-fusion", "large-gated-fusion"}:
         model_args["image_gate_probability"] = checkpoint.get(
             "image_gate_initial_probability", 0.002472623
         )
@@ -100,9 +115,10 @@ def main() -> None:
     model.eval()
     video = (decode_video(args.video, CROPS[crop_name], int(checkpoint["image_size"]))
              if architecture in {"image", "fusion", "gated-fusion",
-                                 "tongue-gated-fusion"} else None)
+                                 "tongue-gated-fusion", "large-gated-fusion"} else None)
     landmarks = landmark_mask = None
-    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"}:
+    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
+                        "large-gated-fusion"}:
         with np.load(args.landmarks_npz) as cached:
             landmarks = torch.from_numpy(cached["coordinates"].astype(np.float32))
         frames = min(len(video), len(landmarks)) if video is not None else len(landmarks)
@@ -116,8 +132,10 @@ def main() -> None:
             raise ValueError("checkpoint coordinate feature dimensions are inconsistent")
         landmarks, landmark_mask = transform_landmarks(
             landmarks, coordinate_mode, coordinate_features)
+    input_frames = len(video) if video is not None else len(landmarks)
     with torch.inference_mode():
-        if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
+        if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
+                            "large-gated-fusion"}:
             logits = model(video.unsqueeze(0).to(device), landmarks.unsqueeze(0).to(device),
                            landmark_mask.unsqueeze(0).to(device))
         elif architecture == "coordinates":
@@ -125,9 +143,12 @@ def main() -> None:
                            landmark_mask.unsqueeze(0).to(device))
         else:
             logits = model(video.unsqueeze(0).to(device))
+        logits, output_lengths = upsample_ctc_logits(
+            logits, torch.tensor([input_frames]),
+            int(checkpoint.get("ctc_upsample_factor", 1)),
+        )
         probabilities = logits.softmax(-1)
-    input_frames = len(video) if video is not None else len(landmarks)
-    ids = greedy_decode(logits, torch.tensor([input_frames]))[0]
+    ids = greedy_decode(logits, output_lengths)[0]
     prediction = [phones[index - 1] for index in ids]
     decoding = checkpoint.get("decoding", {})
     lm_weight = args.lm_weight if args.lm_weight is not None else decoding.get("lm_weight", 0.0)
@@ -139,6 +160,8 @@ def main() -> None:
     normalization = torch.logsumexp(torch.tensor([score for _, score in ranked]), dim=0)
     candidates = [
         {"phonemes": [phones[index - 1] for index in sequence],
+         "visual_phone_alternatives": expand(
+             [phones[index - 1] for index in sequence]),
          "combined_log_score": score,
          "relative_probability_within_top_n": float(
              torch.exp(torch.tensor(score) - normalization))}
@@ -153,7 +176,13 @@ def main() -> None:
         "architecture": architecture,
         "coordinate_mode": checkpoint.get("coordinate_mode", "eye-normalized"),
         "frames": input_frames,
+        "ctc_steps": int(output_lengths[0]),
         "phonemes": prediction,
+        "target_inventory": target_inventory,
+        "visual_phone_alternatives": expand(prediction),
+        "visual_phone_groups": {
+            name: list(members) for name, members in VISUAL_PHONE_GROUPS.items()
+        },
         "top_n_candidates": candidates,
         "beam_width": args.beam_width,
         "beam_token_top_k": args.beam_token_top_k,
@@ -164,7 +193,7 @@ def main() -> None:
     if args.emissions_output or args.word_lexicon:
         from PhonemeDecoder.decoder import (Lexicon, StreamingDecoder,
                                                   VOCABULARY, probabilities_from_logits)
-        rows = probabilities_from_logits(logits, phones, input_frames)
+        rows = probabilities_from_logits(logits, phones, int(output_lengths[0]))
         if args.emissions_output:
             args.emissions_output.write_text(json.dumps({
                 "format": "visual-phoneme-emissions-0.1",

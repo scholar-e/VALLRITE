@@ -78,6 +78,161 @@ scaling remain unmeasured. Native implementation and device profiling are next.
 
 ## Recommended starting point
 
+### Experimental Qwen training
+
+#### Direct phonemes to words
+
+`train_qwen_direct.py` trains a separate LoRA whose input is one ARPAbet phone
+sequence and whose target is the transcript. It does not construct, expose, or
+score a lexicon candidate list. `evaluate_qwen_direct.py` applies that model to
+each sequence in a visual CTC N-best list and reports both top-1 WER and oracle
+WER@N over the directly generated sentences.
+
+```bash
+tools/with-vpa-gpu .venv-qwen/bin/python -m PhonemeDecoder.train_qwen_direct \
+  --manifest datasets/lrs3/manifests/train.jsonl \
+  --model checkpoints/Qwen3.5-2B \
+  --output checkpoints/qwen-direct-lrs3-20260913 \
+  --max-steps 1000 --max-entries 7895 --batch-size 4 \
+  --save-steps 100 --require-cuda
+
+tools/with-vpa-gpu .venv-qwen/bin/python -m PhonemeDecoder.evaluate_qwen_direct \
+  --hypotheses datasets/decoder-training/lrs3-direct-validation/phone-hypotheses.jsonl \
+  --model checkpoints/Qwen3.5-2B \
+  --adapter checkpoints/qwen-direct-lrs3-20260913/adapter \
+  --output checkpoints/qwen-direct-lrs3-20260913/eval-validation.json \
+  --batch-size 32 --require-cuda
+```
+
+The first held-out LRS3 development result covers 1,140 clips and 12,675
+reference words. The frozen hybrid visual checkpoint's phone beam has 78.83%
+oracle PER@5. Direct Qwen decoding gives 116.50% top-1 WER and 102.87% oracle
+WER@5; WER can exceed 100% when insertions are numerous. The 2B base plus this
+22 MB adapter therefore does not yet replace the lexical decoder. Its training
+input used clean transcript-derived phones, while evaluation used very noisy
+visual phones. The next direct experiment should train on out-of-fold visual
+phone hypotheses paired with transcripts (and optionally calibrated synthetic
+phone corruption), without reintroducing word candidates. Do not train the
+decoder on predictions from a visual checkpoint that already fitted the same
+clips and describe the result as held-out.
+
+After scaling forced alignment to 28,739 LRS3 training videos and selecting the
+full-data hybrid's epoch 3, a beam-64/phone-bigram-0.5 export reached 78.14%
+oracle PER@5. Holding the direct Qwen adapter fixed and changing only those
+visual hypotheses improved top-1 WER from 116.50% to **104.58%** and oracle
+WER@5 from 102.87% to **96.94%** on the same 1,140 clips. This demonstrates
+that improving the phone producer helps the word stage, although the remaining
+error still requires noisy-phone decoder training and a stronger visual model.
+
+`train_qwen.py` provides a supervised LoRA warm-up using the local Qwen3.5-2B
+checkpoint and exported GRID candidates. It conditions on observed greedy phones
+and candidate text, masks prompt tokens from the loss, and learns the reference
+candidate plus one EOS. Reference phones and oracle annotations never enter the
+prompt. Records with references absent from the beam are skipped; only training
+speakers 1–8 are accepted. The manifest records the input hash and selected clips.
+
+```bash
+.venv-qwen/bin/python -m PhonemeDecoder.train_qwen \
+  --examples datasets/decoder-training/grid-train-gated-seed-20260912-b64/examples.jsonl \
+  --output checkpoints/qwen-decoder-warmup-new \
+  --max-steps 10 --max-entries 128
+```
+
+Use a new output directory per run. `--prepare-only` validates and writes the
+manifest without loading Qwen. Progress goes to `train.log`; resumable Trainer
+checkpoints are saved every five steps and the final adapter to `adapter/`.
+To resume, repeat the original command with `--resume`. Add `--require-cuda`
+for GPU runs to reject accidental CPU fallback. GPU access may require running
+outside the isolated sandbox, with CUDA-enabled PyTorch in `.venv-qwen`.
+This initial dataset is an **in-sample diagnostic**, with 5,685 eligible records
+and 2,210 absent references. A small warm-up is not evidence of WER improvement.
+Candidate-only inference, visual-score filtering, and held-out validation are
+still required before enabling this adapter in the runtime. Future scoring must
+reuse the prompt and mean target-token log likelihood including EOS; generated
+text must not introduce candidates. The existing runtime is not changed by training.
+
+The final study retains three comparable paths: lexical decoding alone,
+Qwen3.5-2B as a research proof of concept, and a two-layer 256-wide word-level
+GRU intended for int8 phone deployment. Train both rerankers before comparing
+WER on identical frozen emissions. The phone evaluation must also report model
+size, peak memory, latency, and energy; WER alone does not select the mobile model.
+
+### Reusable candidate-model WER evaluation
+
+### Connect video predictions to a trained adapter
+
+Run `VisualPhoneme.predict` with `--word-lexicon` and `--output video.json` first.
+Fusion readers also require `--landmarks-npz`. Then use the Qwen environment:
+
+```bash
+tools/with-vpa-gpu .venv-qwen/bin/python -m PhonemeDecoder.rerank video.json \
+  --model checkpoints/Qwen3.5-0.8B \
+  --adapter checkpoints/qwen-decoder-0.8b-grid-20260913/adapter \
+  --output video-words.json --weight 1 --device cuda
+```
+
+The final `adapter/` exists after training completes; use a preserved intermediate
+checkpoint for preliminary testing. This two-command bridge lets visual inference
+and Qwen use their existing separate Python environments. The output preserves
+`word_decoding` and adds `word_decoding_reranked`, with raw model scores, combined
+scores, original ranks, and fallback diagnostics. No generated text becomes a new
+candidate. Model-load or scoring failure retains the lexical ranking.
+
+The default weight 1 is an experimental setting, not a mobile deployment choice.
+The filter currently uses the runtime's aggregated lexical `log_score`, not pure
+per-path CTC likelihood; it is explicitly recorded as a **base-score window**.
+The earlier evaluation option named `--visual-score-window` uses this same
+aggregate score and must not be interpreted as the full design's visual window.
+
+Completed Qwen3.5-0.8B validation result (2,000 GRID clips, speakers 9–10,
+12,000 reference words): baseline 48.48% WER; weight 1 gives 46.31%, weight 3
+gives 45.90%, and weight 50 gives 45.83% (5,500 errors). The completed 2B adapter
+at weight 50 gives 45.80% (5,496 errors). Weight 50 was previously selected on
+this validation set for 2B; this is development comparison, not untouched test
+performance. Full results and reusable scores are in
+`checkpoints/qwen-decoder-0.8b-grid-20260913/eval-validation-final.json` and
+`eval-validation-final.scores.jsonl` in the same directory.
+
+The bridge was checked on real clip `s9:bgbt4n` with the gated-fusion reader,
+its landmark cache, and the completed 0.8B adapter. The output
+`checkpoints/qwen-decoder-0.8b-grid-20260913/video-smoke-reranked.json`
+records successful candidate scoring. This verifies the connection, not clip
+accuracy or phone deployment performance.
+
+The additional mid-sized experiment uses `Qwen/Qwen3.5-0.8B`, downloaded to
+`checkpoints/Qwen3.5-0.8B`. It uses the same training examples, seed, rank-8 LoRA,
+and 5,685-step budget as the 2B run. Its separate output directory is
+`checkpoints/qwen-decoder-0.8b-grid-20260913`. This adds a model-size comparison;
+phone performance remains unmeasured and the compact GRU remains proposed.
+
+```bash
+tools/with-vpa-gpu .venv-qwen/bin/python -m PhonemeDecoder.train_qwen \
+  --model checkpoints/Qwen3.5-0.8B \
+  --examples datasets/decoder-training/grid-train-gated-seed-20260912-b64/examples.jsonl \
+  --output checkpoints/qwen-decoder-0.8b-grid-20260913 \
+  --max-steps 5685 --max-entries 5685 --require-cuda
+```
+
+`evaluate_candidate_scores.py` separates model inference from WER calculation.
+Any future phoneme-to-word model can emit one JSON object per line containing
+`clip_id`, `candidate_index`, `candidate_text`, and a finite higher-is-better
+`score`. The evaluator validates candidate identity, applies the configured
+visual-score window, combines model and decoder scores over a weight sweep, and
+reports baseline, reranked, and oracle N-best WER. Saved score files make new
+weight sweeps CPU-only and deterministic.
+
+`evaluate_qwen.py` is the Qwen adapter for this format. For example:
+
+```bash
+tools/with-vpa-gpu .venv-qwen/bin/python -m PhonemeDecoder.evaluate_qwen \
+  --examples path/to/examples.jsonl --adapter path/to/adapter \
+  --output path/to/evaluation.json --batch-size 8 --require-cuda
+
+.venv-qwen/bin/python -m PhonemeDecoder.evaluate_candidate_scores \
+  --examples path/to/examples.jsonl \
+  --scores path/to/evaluation.scores.jsonl --output path/to/weight-sweep.json
+```
+
 Use the compact `VisualPhoneme` model as the first producer. Export its full
 blank-plus-39-phone distribution at each valid output step. Apply CTC prefix
 beam search, segment the retained phoneme sequences through a pronunciation

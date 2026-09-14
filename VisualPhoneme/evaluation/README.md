@@ -143,6 +143,131 @@ pixels only when lip aperture makes the oral cavity observable; it does not
 estimate hidden tongue position. A future tongue-specific loss requires
 separately reviewed visibility, mask, or keypoint labels.
 
+## Preliminary LRS3 scaling and staged fusion
+
+The first LRS3 scaling run matched the original GRID training volume with 7,895
+training clips and used all 1,140 usable validation clips (44,586 reference
+phones). This comparison must not be described as a reproduction of 10% WER:
+the earlier GRID result was a 10.09-point *PER improvement*, ending at 62.92%
+PER, and GRID's fixed six-word grammar is much easier than unconstrained LRS3.
+
+LRS3 has a median 2.16 frames per target phone, versus roughly 3.4 in the GRID
+pilot. A checkpointed `--ctc-upsample-factor 2` therefore repeats temporal
+emissions before CTC loss and decoding to provide more alignment states. The
+coordinate path was trained first; gated fusion then initialized from its best
+checkpoint and froze that path for three image warm-up epochs. Both models used
+the same clip-centered motion features, regularization, bigram weight 0.25, and
+held-out validation set.
+
+| Condition | Greedy PER | Oracle PER@1 | @3 | @5 | @10 | @20 |
+|---|---:|---:|---:|---:|---:|---:|
+| Coordinates, 2x CTC, bigram 0.25 | 91.19% | 83.52% | 82.69% | **82.33%** | 81.82% | 81.27% |
+| Staged gated fusion, 2x CTC, bigram 0.25 | 94.67% | 84.00% | 83.11% | **82.64%** | 82.06% | 81.51% |
+
+The image residual worsened oracle PER@5 by 0.31 points. Both runs selected
+epoch 1 and later drifted toward blank-heavy CTC output even as loss fell. The
+2x alignment change improved the early coordinate result but did not solve
+collapse.
+
+## Quarter-LRS3 teacher-aligned curriculum
+
+The follow-up froze a quarter-sized source subset: 7,895 LRS3 trainval clips.
+Whisper `large-v3-turbo` supplied word timestamps for 7,557 accepted or cached
+clips. Its transcript was checked against the official LRS3 transcript, with a
+minimum normalized word-sequence agreement of 0.8. Phones still come from the
+official transcript and CMUdict; each word's phones are divided uniformly over
+the teacher word interval. This is useful weak timing supervision, not a claim
+that Whisper produced phone-level ground truth.
+
+After transcript, pronunciation, alignment, and CTC-validity filtering, 6,607
+source videos produced 21,106 consecutive word chunks of at most 16 phones
+(except when one word itself exceeds the cap). Training used timestamped
+nonblank frame cross-entropy as an auxiliary objective. The coordinate model
+received five frame-only warm-up epochs, then CTC at weight 0.1 with 2x emission
+upsampling. The gated hybrid initialized that checkpoint, froze coordinates for
+three image-residual warm-up epochs, and then used the same low CTC weight.
+Validation remained the unchanged 1,140-clip AV-HuBERT LRS3 validation set;
+teacher timings were used only to construct training examples.
+
+| Quarter-LRS3 condition | Parameters | Selected epoch | Greedy PER | Oracle PER@5 | Image gate |
+|---|---:|---:|---:|---:|---:|
+| Teacher-aligned coordinates | 69,448 | 15 | 91.48% | 81.16% | n/a |
+| Teacher-aligned gated hybrid | 157,849 | 9 | 87.48% | **80.36%** | 6.08% |
+
+The hybrid improves oracle PER@5 by 0.80 points over its coordinate initializer.
+Unlike the full-strength CTC attempts, neither low-weight run collapsed to blank
+predictions. The global image gate scales an additive image feature correction;
+it is not a per-frame confidence, modality percentage, or tongue detector.
+
+### Forced-boundary repeat
+
+The same frozen 7,895-source subset was labelled again after adding the local
+transcript-constrained Wav2Vec2 CTC/Viterbi aligner. All 7,895 clips received
+acoustic phone intervals; 7,557 passed label quality and 338 remained rejected
+for pronunciation coverage. After the unchanged transcript-agreement and
+CTC-validity filters, training contained 21,102 chunks. The validation split,
+model sizes, curriculum, LM weight, and PER@5 checkpoint selection remained
+unchanged.
+
+| Forced-boundary condition | Parameters | Selected epoch | Greedy PER | Oracle PER@5 | Image gate |
+|---|---:|---:|---:|---:|---:|
+| Coordinates | 69,448 | 12 | 83.73% | 81.28% | n/a |
+| Gated hybrid | 157,849 | 24 | 84.49% | **78.81%** | 6.49% |
+
+The hybrid ran for the full 30-minute budget and saved 33 validated epoch
+checkpoints; the coordinate stage saved 22 before early stopping. The selected
+hybrid improves oracle PER@5 by 2.47 points over its forced-boundary coordinate
+initializer. Greedy and oracle trends diverged, so the selected checkpoint's
+84.49% greedy PER must not be replaced by the lower greedy PER from a different
+epoch. Periodic weights and `metrics.json` retain that complete curve for later
+decoder and calibration analysis.
+
+### Full-LRS3 forced-alignment scaling
+
+The official-transcript CTC/Viterbi aligner was applied to the remaining
+training manifest without rerunning Whisper. It reused the quarter-set labels,
+added 22,117 accepted alignments, rejected 1,079 new clips at the existing
+pronunciation-coverage gate, and had zero alignment failures. The resulting
+loader retained 28,739 source videos and produced 88,949 chunks after CTC
+validity filtering, versus 21,102 chunks in the quarter run.
+
+A plain full-utterance CTC fine-tune was stopped after one epoch because it
+collapsed toward blank output (99.41% validation PER and 94.27% oracle PER@5).
+The aligned auxiliary objective remained stable. Fine-tuning the selected
+quarter hybrid at learning rate 3e-5 stopped after 11 epochs and selected epoch
+3: greedy PER 84.67% and narrow-beam oracle PER@5 78.69%, improving the prior
+78.81% oracle by 0.12 points. Later epochs reached 83.65% greedy PER but had
+worse Top-5 oracle results and were not selected.
+
+A frozen wider decoder sweep (beam 64, twelve token expansions per frame) found
+that phone-bigram weight 0.5 gives 78.14% oracle PER@5 and 76.86% oracle PER@20.
+These are decoder-assisted oracle values, not deployable top-1 accuracy; the
+same setting gives 79.63% oracle PER@1. Alignment coverage alone is therefore
+not the remaining primary bottleneck.
+
+## First 10M-model run
+
+The compact GRID and LRS3 architecture names were left unchanged. A separate
+`large-gated-fusion` model uses 9,405,321 parameters, a 384-channel fused
+representation, and ten full residual temporal blocks. It trained for the same
+30-minute ceiling on all 88,949 forced-aligned chunks. Two frame-only warm-up
+epochs preceded the aligned-frame plus 0.1-weight CTC objective. Symmetric 10%
+modality dropout and a 10% initial image gate kept the expanded image branch
+active; the selected epoch's image gate reached 19.42%.
+
+Epoch 5 was selected on strict 39-phone oracle PER@5. No viseme grouping entered
+training, beam scoring, or checkpoint selection. Under the training-time beam
+(width 16, phone-bigram weight 0.25), strict greedy PER is 79.48% and strict
+oracle PER@5 is 75.81%. A frozen beam-64 sweep at weight 0.5 improves strict
+oracle PER to 74.80% at N=5 and 73.40% at N=20.
+
+The separately labelled visual-group metric maps both references and hypotheses
+through the exhaustive phone-family partition after decoding. It is 70.76%
+greedy group PER, 65.33% oracle group PER@5, and 64.00% oracle group PER@20.
+These lower group numbers measure recovery up to visual equivalence and must not
+be reported as ordinary PER. The selected checkpoint is 36 MB and all ten
+validated epoch checkpoints were retained.
+
 Complete local artifacts are ignored by Git at
 `checkpoints/visual-phoneme-fusion/`: `best.pt`, `metrics.json`, and `train.log`.
 The selected fusion checkpoint was saved at epoch 20. Earlier checkpoints remain

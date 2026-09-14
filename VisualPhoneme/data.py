@@ -161,6 +161,8 @@ def fit_bigram_log_probs(sequences, classes: int, smoothing: float = 1.0) -> tor
 
 
 class GridClips(Dataset):
+    landmark_points = 41
+
     def __init__(self, root: Path, split: str, size: int = 96, crop: str = "face",
                  limit: int | None = None, augment: bool = False,
                  include_landmarks: bool = False, include_video: bool = True,
@@ -219,6 +221,15 @@ class GridClips(Dataset):
 
     def __len__(self) -> int:
         return len(self.rows)
+
+    def target_sequences(self) -> list[tuple[int, ...]]:
+        sequences = []
+        for row in self.rows:
+            stem = Path(row["video"]).stem
+            alignment = (self.root / "landmark-experiment" / "aligned"
+                         / f"s{row['speaker_id']}" / f"{stem}.json")
+            sequences.append(phoneme_target(str(alignment)))
+        return sequences
 
     def __getitem__(self, index: int):
         row = self.rows[index]
@@ -296,6 +307,37 @@ def collate_landmark_clips(items):
         padded_masks[index, :len(mask)] = mask
     return (padded_landmarks, padded_masks, torch.cat(targets), lengths,
             target_lengths, clip_ids)
+
+
+def _pad_frame_targets(frame_targets, steps: int) -> torch.Tensor:
+    padded = torch.full((len(frame_targets), steps), -100, dtype=torch.long)
+    for index, target in enumerate(frame_targets):
+        padded[index, :len(target)] = target
+    return padded
+
+
+def collate_aligned_clips(items):
+    videos, targets, frame_targets, clip_ids = zip(*items)
+    base = collate_clips(list(zip(videos, targets, clip_ids)))
+    video, packed, lengths, target_lengths, identifiers = base
+    return (video, packed, lengths, target_lengths,
+            _pad_frame_targets(frame_targets, video.shape[1]), identifiers)
+
+
+def collate_aligned_fusion_clips(items):
+    videos, landmarks, masks, targets, frame_targets, clip_ids = zip(*items)
+    base = collate_fusion_clips(list(zip(videos, landmarks, masks, targets, clip_ids)))
+    video, points, point_masks, packed, lengths, target_lengths, identifiers = base
+    return (video, points, point_masks, packed, lengths, target_lengths,
+            _pad_frame_targets(frame_targets, video.shape[1]), identifiers)
+
+
+def collate_aligned_landmark_clips(items):
+    landmarks, masks, targets, frame_targets, clip_ids = zip(*items)
+    base = collate_landmark_clips(list(zip(landmarks, masks, targets, clip_ids)))
+    points, point_masks, packed, lengths, target_lengths, identifiers = base
+    return (points, point_masks, packed, lengths, target_lengths,
+            _pad_frame_targets(frame_targets, points.shape[1]), identifiers)
 
 
 def greedy_decode(logits: torch.Tensor, lengths: torch.Tensor) -> list[list[int]]:

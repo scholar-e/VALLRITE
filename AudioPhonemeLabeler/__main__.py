@@ -13,13 +13,19 @@ from typing import Iterable
 
 from .alignment import MontrealForcedAligner, normalize_audio
 from .core import (add_acoustic_evidence, build_alignment, select_consensus,
-                   use_forced_alignment)
+                   phone_intervals_to_alignment, use_forced_alignment)
 from .phones import Wav2Vec2PhoneTeacher
 from .teachers import FasterWhisperTeacher
 
 LOGGER = logging.getLogger("audio_phoneme_labeler")
 MEDIA_SUFFIXES = {".aac", ".flac", ".m4a", ".mkv", ".mov", ".mp3", ".mp4",
                   ".mpeg", ".mpg", ".ogg", ".wav", ".webm"}
+ARPABET_PHONES = {
+    "AA", "AE", "AH", "AO", "AW", "AY", "B", "CH", "D", "DH", "EH",
+    "ER", "EY", "F", "G", "HH", "IH", "IY", "JH", "K", "L", "M", "N",
+    "NG", "OW", "OY", "P", "R", "S", "SH", "T", "TH", "UH", "UW", "V",
+    "W", "Y", "Z", "ZH",
+}
 
 
 def configure_logging(path: Path) -> None:
@@ -72,7 +78,10 @@ def cmudict_pronunciation(word: str) -> list[str]:
             "pronouncing is required; install requirements-labeler.txt"
         ) from error
     pronunciations = pronouncing.phones_for_word(word)
-    return pronunciations[0].split() if pronunciations else []
+    if not pronunciations:
+        return []
+    return [phone for phone in pronunciations[0].split()
+            if re.sub(r"\d", "", phone) in ARPABET_PHONES]
 
 
 def atomic_json(path: Path, document: dict) -> None:
@@ -118,6 +127,9 @@ def main() -> None:
                         default="preferred")
     parser.add_argument("--mfa-dictionary", default="english_us_arpa")
     parser.add_argument("--mfa-acoustic-model", default="english_us_arpa")
+    parser.add_argument("--ctc-align-mode", choices=("required", "preferred", "off"),
+                        default="preferred",
+                        help="transcript-constrained Wav2Vec2 phone alignment fallback")
     args = parser.parse_args()
     thresholds = (args.min_quality, args.min_coverage, args.min_agreement,
                   args.min_phone_agreement)
@@ -145,7 +157,7 @@ def main() -> None:
                                      args.local_files_only, model_cache_dir)
                 for name in teacher_names]
     phone_teacher = None
-    if args.phone_teacher_mode != "off":
+    if args.phone_teacher_mode != "off" or args.ctc_align_mode != "off":
         try:
             LOGGER.info("loading phone_teacher=%s", args.phone_teacher_model)
             phone_teacher = Wav2Vec2PhoneTeacher(
@@ -153,7 +165,8 @@ def main() -> None:
                 model_cache_dir,
             )
         except Exception:
-            if args.phone_teacher_mode == "required":
+            if (args.phone_teacher_mode == "required"
+                    or args.ctc_align_mode == "required"):
                 raise
             LOGGER.warning("direct phone teacher unavailable; continuing in preferred mode",
                            exc_info=True)
@@ -194,6 +207,7 @@ def main() -> None:
                     "mfa_mode": args.mfa_mode,
                     "mfa_dictionary": args.mfa_dictionary,
                     "mfa_acoustic_model": args.mfa_acoustic_model,
+                    "ctc_align_mode": args.ctc_align_mode,
                     "model_cache_dir": str(model_cache_dir),
                 },
             }
@@ -205,7 +219,8 @@ def main() -> None:
                 "off" if args.phone_teacher_mode == "off" else "unavailable"
             )
             document["quality"]["forced_alignment"] = (
-                "off" if args.mfa_mode == "off" else "fallback"
+                "off" if args.mfa_mode == "off" and args.ctc_align_mode == "off"
+                else "fallback"
             )
             if args.mfa_mode != "off" and not aligner.available:
                 document["quality"]["forced_alignment_error"] = (
@@ -219,21 +234,52 @@ def main() -> None:
                     work_dir = Path(temporary)
                     wav_path = work_dir / "audio.wav"
                     normalize_audio(source, wav_path)
+                    ctc_alignment_complete = False
                     if phone_teacher is not None:
                         try:
-                            direct = phone_teacher.recognize(wav_path)
-                            add_acoustic_evidence(
-                                document, direct.arpabet, direct.mapping_coverage,
-                                direct.raw, direct.model, args.min_phone_agreement,
-                                args.min_quality,
-                            )
-                            document["quality"]["direct_phone_status"] = "complete"
+                            targets = [str(entry[2])
+                                       for entry in document["tiers"]["phones"]["entries"]]
+                            if args.ctc_align_mode != "off":
+                                direct, forced_phones = phone_teacher.recognize_and_align(
+                                    wav_path, targets
+                                )
+                                forced = phone_intervals_to_alignment(
+                                    document, forced_phones.entries,
+                                    forced_phones.path_confidence,
+                                )
+                                use_forced_alignment(
+                                    document, forced,
+                                    f"CTC Viterbi {forced_phones.model}",
+                                )
+                                document["quality"]["forced_alignment_score"] = (
+                                    forced_phones.path_confidence
+                                )
+                                document["quality"]["forced_alignment_frame_seconds"] = (
+                                    forced_phones.frame_duration
+                                )
+                                ctc_alignment_complete = True
+                            else:
+                                direct = phone_teacher.recognize(wav_path)
+                            if args.phone_teacher_mode != "off":
+                                add_acoustic_evidence(
+                                    document, direct.arpabet, direct.mapping_coverage,
+                                    direct.raw, direct.model, args.min_phone_agreement,
+                                    args.min_quality,
+                                )
+                                document["quality"]["direct_phone_status"] = "complete"
                         except Exception as error:
-                            document["quality"]["direct_phone_status"] = "failed"
-                            document["quality"]["direct_phone_error"] = str(error)
+                            if args.phone_teacher_mode != "off":
+                                document["quality"]["direct_phone_status"] = "failed"
+                                document["quality"]["direct_phone_error"] = str(error)
                             if args.phone_teacher_mode == "required":
                                 document["quality"]["rejection_reasons"].append(
                                     "direct_phone_teacher_required"
+                                )
+                            if args.ctc_align_mode != "off":
+                                document["quality"]["ctc_forced_alignment_error"] = str(error)
+                            if args.ctc_align_mode == "required":
+                                document["quality"]["rejection_reasons"].append(
+                                    "ctc_forced_alignment_required"
                                 )
                             LOGGER.warning("direct phone teacher failed for %s", source,
                                            exc_info=True)
@@ -253,6 +299,14 @@ def main() -> None:
                                 )
                             LOGGER.warning("forced alignment unavailable for %s", source,
                                            exc_info=True)
+                    if (args.mfa_mode == "off" and args.ctc_align_mode != "off"
+                            and not ctc_alignment_complete
+                            and args.ctc_align_mode == "required"
+                            and "ctc_forced_alignment_required" not in
+                            document["quality"]["rejection_reasons"]):
+                        document["quality"]["rejection_reasons"].append(
+                            "ctc_forced_alignment_required"
+                        )
             reasons = document["quality"]["rejection_reasons"]
             document["label_status"] = "accepted" if not reasons else "rejected"
             atomic_json(destination, document)

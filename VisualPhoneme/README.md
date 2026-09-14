@@ -5,6 +5,67 @@ This branch trains a small visual-only network directly on face video. A shared
 models motion and coarticulation, and a CTC head predicts an ARPAbet phoneme
 sequence. Audio is used only to create training targets; inference uses video.
 
+## LRS3 integration
+
+The 30-hour LRS3 trainval split is supported alongside GRID. Source archives
+are kept under `datasets/lrs3/downloads/`; extracted face-track videos live in
+`datasets/lrs3/raw/trainval/`. The preparation pass creates transcript-derived,
+stress-free CMUdict targets and uses AV-HuBERT's published 1,200-utterance
+validation list rather than inventing a random clip split:
+
+```bash
+.venv-vpa-gpu/bin/python -m VisualPhoneme.prepare_lrs3 \
+  --root datasets/lrs3
+```
+
+The supplied 68-point tracks are eye-normalized for the coordinate branch. Lip
+corners and inner-lip aperture points are given stable leading positions so the
+hybrid and observability-gated branches retain their intended semantics.
+Missing detections remain time-aligned as masked `NaN` frames.
+
+An LRS3 hybrid training run can then be launched with:
+
+```bash
+.venv-vpa-gpu/bin/python -m VisualPhoneme.train \
+  --dataset lrs3 \
+  --data-root datasets/lrs3 \
+  --architecture gated-fusion \
+  --crop mouth \
+  --image-size 96 \
+  --coordinate-mode eye-normalized \
+  --coordinate-features motion \
+  --output-dir checkpoints/lrs3-gated-fusion
+```
+
+For weak time supervision, audio-teacher `labels.jsonl` output can be joined to
+the original LRS3 files with `--lrs3-teacher-labels`. The loader verifies the
+teacher transcript against the official transcript, turns consecutive timed
+words into short training chunks, and creates auxiliary nonblank frame labels.
+For example, the quarter-data coordinate curriculum uses:
+
+```bash
+.venv-vpa-gpu/bin/python -m VisualPhoneme.train \
+  --dataset lrs3 --data-root datasets/lrs3 \
+  --architecture coordinates --coordinate-mode clip-centered \
+  --coordinate-features motion --landmark-bottleneck 32 \
+  --train-limit 7895 \
+  --lrs3-teacher-labels datasets/lrs3/audio-teacher-quarter \
+  --max-chunk-phones 16 --min-teacher-transcript-agreement 0.8 \
+  --aligned-frame-loss-weight 1 --frame-only-epochs 5 \
+  --ctc-loss-weight 0.1 --ctc-upsample-factor 2
+```
+
+Teacher timing is word-level. The phones inside each word are uniformly divided
+over its interval, so the auxiliary labels are deliberately treated as weak
+supervision. Validation is never teacher-chunked.
+
+The mirrored test Parquet files contain 1,321 precomputed 96×96 grayscale mouth
+videos and transcripts. They are materialized as individual NumPy arrays for
+efficient evaluation. They do not retain the original LRS3 clip identifiers,
+so there is currently no verified join to the separately named test landmark
+files. Test evaluation is therefore image-only until that mapping is recovered;
+train and validation support image, coordinates, and hybrid inputs.
+
 An optional fusion path embeds the 41 eye-normalized VPA coordinates, including
 40 lip-contour points and the chin, with an explicit per-frame visibility bit.
 The coordinate vector joins the image embedding before temporal modeling.
@@ -17,6 +78,15 @@ The default model has 123,096 parameters and retains one output step per
 video frame. It therefore avoids the eight-step capacity limit in the current
 VALLR checkpoint. This is an independent baseline, not a replacement for VALLR
 until speaker-disjoint phoneme error rate supports that decision.
+
+`--architecture large-gated-fusion` is a separate 9,405,321-parameter LRS3
+family. It widens the image/geometry representation to 384 channels and uses
+ten full residual temporal-convolution blocks with repeated dilations 1, 2, 4,
+8, and 16. It keeps the same aligned-data loader, per-frame CTC output, decoding,
+and checkpoint metadata. Existing compact GRID architecture names and tensor
+shapes are unchanged, so their checkpoints remain reproducible. The large model
+is about 60 times the compact LRS3 hybrid but about 19 times smaller than the
+182.4M-parameter original VALLR visual model.
 
 ## Data protocol
 
@@ -148,6 +218,15 @@ probabilities normalized within the returned candidate set. These relative
 probabilities are useful to the next probabilistic stage but are not calibrated
 probabilities over every possible phoneme sequence.
 
+Prediction also preserves visual ambiguity through a fixed, exhaustive viseme
+partition. Each decoded position contains its observed phone, group name, and
+every allowed member—for example `{B,M,P}`, `{F,V}`, `{DH,TH}`, and
+`{CH,JH,SH,ZH}`. Selecting a group therefore passes all of its phones to the
+next decoder instead of prematurely choosing among visually indistinguishable
+sounds. This guarantees inclusion only within the selected group; it cannot
+recover the true phone when the visual model selects the wrong group. The raw
+39-phone probabilities and original phoneme hypotheses remain available.
+
 Use `evaluate_nbest.py` to encode validation clips once and report a consistent
 oracle curve at N=1, 3, 5, 10, and 20. The evaluator supports multiple language
 model weights without rerunning the neural network. Keep the beam width at least
@@ -209,6 +288,22 @@ sample before retraining. Audio remains a dataset-construction teacher and is
 not an input to the deployed visual model.
 
 ## Run
+
+Scale transcript-constrained acoustic boundaries across an LRS3 manifest
+without rerunning ASR:
+
+```bash
+tools/with-vpa-gpu .venv-vpa-gpu/bin/python \
+  -m AudioPhonemeLabeler.align_lrs3_manifest \
+  --manifest datasets/lrs3/manifests/train.jsonl \
+  --data-root datasets/lrs3 \
+  --output-dir datasets/lrs3/audio-teacher-full-forced \
+  --seed-labels datasets/lrs3/audio-teacher-quarter-forced/labels.jsonl \
+  --device cuda --local-files-only
+```
+
+The command is resumable through `labels.jsonl`, writes dual-output progress to
+`align.log`, and keeps pronunciation-coverage rejections auditable.
 
 From the VALLRITE repository root:
 
@@ -290,10 +385,15 @@ Quick pipeline check:
   --train-limit 32 --validation-limit 16 --epochs 2 --workers 0
 ```
 
-Training writes `train.log`, `metrics.json`, and `best.pt`. Logs include source
-filename and line number and are flushed at epoch boundaries. The test speakers
-are intentionally absent from the training command; a separate frozen test
-evaluator should be added only after model choices are complete.
+Training writes `train.log`, `metrics.json`, the selected `best.pt`, and an
+`epochs/epoch-NNNN.pt` checkpoint after every validation epoch. Each periodic
+checkpoint contains its training and validation metrics, selection key, decoder
+configuration, and learned gate values so the improvement curve can be
+reanalyzed later. Use `--checkpoint-every N` to retain a coarser interval or
+`--checkpoint-every 0` to disable periodic weights. Logs include source filename
+and line number and are flushed at epoch boundaries. The test speakers are
+intentionally absent from the training command; a separate frozen test evaluator
+should be added only after model choices are complete.
 
 Predict from a video using the best saved checkpoint:
 

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPOSITORY_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+CUDA_LIBRARY_DIR=/usr/local/lib/ollama/cuda_v12
+CUDNN_CANDIDATES=(
+  "$REPOSITORY_ROOT"/.venv-vpa-gpu/lib/python*/site-packages/nvidia/cudnn/lib
+)
+
+if [[ ! -f "$CUDA_LIBRARY_DIR/libcublas.so.12" ]]; then
+  echo "CUDA 12 library not found: $CUDA_LIBRARY_DIR/libcublas.so.12" >&2
+  exit 1
+fi
+
+if [[ ${#CUDNN_CANDIDATES[@]} -ne 1 || ! -f "${CUDNN_CANDIDATES[0]}/libcudnn.so.9" ]]; then
+  echo "Expected one cuDNN 9 library directory in .venv-vpa-gpu" >&2
+  exit 1
+fi
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: tools/with-vpa-gpu COMMAND [ARG ...]" >&2
+  exit 2
+fi
+
+export LD_LIBRARY_PATH="$CUDA_LIBRARY_DIR:${CUDNN_CANDIDATES[0]}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$@"

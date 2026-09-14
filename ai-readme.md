@@ -15,6 +15,46 @@ The audit's central prediction — that the current 16-frame/eight-step
 configuration cannot emit sentence-length phoneme sequences — has since been
 measured rather than merely inferred; see section 3.
 
+## Local GPU execution
+
+This machine has an NVIDIA RTX 5090, but two independent environment details
+can make it appear unavailable to an automated agent:
+
+1. The restricted command sandbox does not expose the host GPU. CUDA training,
+   inference, `nvidia-smi`, and CUDA availability checks must use host/elevated
+   execution.
+2. CTranslate2/faster-whisper needs CUDA libraries that are installed outside
+   the virtual environment. In particular, running it without the local CUDA
+   path fails with `libcublas.so.12` not found.
+
+Run GPU commands through the repository launcher:
+
+```bash
+tools/with-vpa-gpu .venv-vpa-gpu/bin/python -m VisualPhoneme.train ...
+tools/with-vpa-gpu .venv-vpa-gpu/bin/python -m AudioPhonemeLabeler ...
+```
+
+The launcher prepends these verified paths to `LD_LIBRARY_PATH`:
+
+```text
+/usr/local/lib/ollama/cuda_v12
+.venv-vpa-gpu/lib/python*/site-packages/nvidia/cudnn/lib
+```
+
+It discovers the virtual environment's Python version, validates
+`libcublas.so.12` and `libcudnn.so.9`, preserves any existing library path, and
+then replaces itself with the requested command. Test the complete setup with
+host/elevated execution:
+
+```bash
+tools/with-vpa-gpu .venv-vpa-gpu/bin/python -c \
+  'import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))'
+```
+
+Do not treat a sandboxed `False` result as evidence that the machine lacks a
+GPU, and do not install another CUDA stack before trying the launcher. Continue
+to use each trainer's `--max-minutes` option for bounded experiments.
+
 ## 1. Objective
 
 Build an accurate, interpretable, visual-only speech recognizer that extracts
@@ -367,6 +407,15 @@ boundaries are approximate supervision for visual gestures: coarticulation can
 begin before and persist after the associated sound. Use soft windows or learned
 lag, and validate on video annotations. Start with sequence supervision if
 reliable temporal correspondence is unavailable.
+
+Implementation status: `AudioPhonemeLabeler` now provides both an MFA adapter
+and a self-contained transcript-constrained CTC/Viterbi aligner. The latter sums
+the probabilities of acoustic IPA tokens that map to each requested ARPAbet
+phone, permits CTC blanks between phones, and converts the best path into phone
+and reconstructed word intervals. It records the acoustic model, path
+confidence, and frame resolution. It replaces uniform within-word timing, but
+does not make the boundaries ground truth or independently validate the supplied
+transcript.
 
 Split by speaker before teacher generation and tuning. Generate out-of-fold
 visual predictions for downstream decoder training so the decoder learns

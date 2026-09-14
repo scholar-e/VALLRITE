@@ -13,18 +13,23 @@ import time
 import numpy as np
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
-from VisualPhoneme.data import (GridClips, PHONEMES, collate_clips,
+from VisualPhoneme.data import (GridClips, PHONEMES, collate_aligned_clips,
+                                collate_aligned_fusion_clips,
+                                collate_aligned_landmark_clips, collate_clips,
                                 collate_fusion_clips, collate_landmark_clips,
                                 ctc_prefix_beam_search, fit_bigram_log_probs,
-                                greedy_decode, landmark_feature_dimensions,
-                                phoneme_target)
+                                greedy_decode, landmark_feature_dimensions)
+from VisualPhoneme.lrs3_data import Lrs3Clips
 from VisualPhoneme.model import (CompactFusionVisualPhoneme,
                                  CompactGatedFusionVisualPhoneme,
                                  CompactLandmarkPhoneme,
                                  CompactTongueGatedFusionVisualPhoneme,
-                                 CompactVisualPhoneme)
+                                 CompactVisualPhoneme,
+                                 LargeGatedFusionVisualPhoneme)
+from VisualPhoneme.visemes import PHONE_ID_TO_VISUAL_GROUP_ID, VISUAL_GROUPS
 LOGGER = logging.getLogger("visual_phoneme")
 
 
@@ -63,11 +68,23 @@ def edit_totals(reference: list[int], hypothesis: list[int]) -> tuple[int, int]:
     return previous[-1], len(reference)
 
 
+def upsample_ctc_logits(logits: torch.Tensor, lengths: torch.Tensor,
+                        factor: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Repeat temporal emissions to give dense-label CTC more alignment states."""
+    if factor < 1:
+        raise ValueError("CTC upsample factor must be positive")
+    if factor == 1:
+        return logits, lengths
+    return logits.repeat_interleave(factor, dim=0), lengths * factor
+
+
 def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, deadline=None,
               top_n=1, beam_width=1, beam_token_top_k=None,
               transition_log_probs=None, lm_weight=0.0,
               image_modality_dropout=0.0, coordinate_modality_dropout=0.0,
-              freeze_coordinate_path=False):
+              freeze_coordinate_path=False, ctc_upsample_factor=1,
+              aligned_frame_loss_weight=0.0, ctc_loss_weight=1.0,
+              target_id_map=None):
     training = optimizer is not None
     model.train(training)
     if training and freeze_coordinate_path:
@@ -77,21 +94,42 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
     oracle_errors = exact_hits = 0
     started = time.perf_counter()
     for step, batch in enumerate(loader, 1):
-        if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
-            video, landmarks, landmark_mask, targets, lengths, target_lengths, _ = batch
+        frame_targets = None
+        if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
+                            "large-gated-fusion"}:
+            if training and aligned_frame_loss_weight:
+                (video, landmarks, landmark_mask, targets, lengths, target_lengths,
+                 frame_targets, _) = batch
+            else:
+                video, landmarks, landmark_mask, targets, lengths, target_lengths, _ = batch
             landmarks = landmarks.to(device, non_blocking=True)
             landmark_mask = landmark_mask.to(device, non_blocking=True)
             video = video.to(device, non_blocking=True)
         elif architecture == "coordinates":
-            landmarks, landmark_mask, targets, lengths, target_lengths, _ = batch
+            if training and aligned_frame_loss_weight:
+                landmarks, landmark_mask, targets, lengths, target_lengths, frame_targets, _ = batch
+            else:
+                landmarks, landmark_mask, targets, lengths, target_lengths, _ = batch
             landmarks = landmarks.to(device, non_blocking=True)
             landmark_mask = landmark_mask.to(device, non_blocking=True)
             video = None
         else:
-            video, targets, lengths, target_lengths, _ = batch
+            if training and aligned_frame_loss_weight:
+                video, targets, lengths, target_lengths, frame_targets, _ = batch
+            else:
+                video, targets, lengths, target_lengths, _ = batch
             video = video.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
-        if training and architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
+        if target_id_map is not None:
+            targets = target_id_map[targets]
+            if frame_targets is not None:
+                frame_targets = frame_targets.to(device, non_blocking=True)
+                valid_frame_targets = frame_targets >= 0
+                frame_targets[valid_frame_targets] = target_id_map[
+                    frame_targets[valid_frame_targets]
+                ]
+        if training and architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
+                                         "large-gated-fusion"}:
             if image_modality_dropout:
                 dropped = torch.rand(len(video), device=device) < image_modality_dropout
                 video[dropped] = 0
@@ -102,25 +140,38 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
         if training:
             optimizer.zero_grad(set_to_none=True)
         with torch.set_grad_enabled(training):
-            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
+            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
+                                "large-gated-fusion"}:
                 logits = model(video, landmarks, landmark_mask)
             elif architecture == "coordinates":
                 logits = model(landmarks, landmark_mask)
             else:
                 logits = model(video)
-            loss = loss_fn(logits.log_softmax(-1), targets, lengths, target_lengths)
+            frame_loss = None
+            if frame_targets is not None:
+                frame_loss = F.cross_entropy(
+                    logits.permute(1, 2, 0), frame_targets.to(device, non_blocking=True),
+                    ignore_index=-100,
+                )
+            logits, output_lengths = upsample_ctc_logits(
+                logits, lengths, ctc_upsample_factor
+            )
+            ctc_loss = loss_fn(logits.log_softmax(-1), targets, output_lengths, target_lengths)
+            loss = ctc_loss_weight * ctc_loss
+            if frame_loss is not None:
+                loss = loss + aligned_frame_loss_weight * frame_loss
             if training:
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), 5.0)
                 optimizer.step()
-        hypotheses = greedy_decode(logits.detach(), lengths)
+        hypotheses = greedy_decode(logits.detach(), output_lengths)
         beam_candidates = None
         if not training and top_n > 1:
             log_probabilities = logits.detach().log_softmax(-1).transpose(0, 1).cpu()
             beam_candidates = [
                 ctc_prefix_beam_search(scores[:int(length)], beam_width, top_n,
                                        beam_token_top_k, transition_log_probs, lm_weight)
-                for scores, length in zip(log_probabilities, lengths)
+                for scores, length in zip(log_probabilities, output_lengths)
             ]
         offset = 0
         for item_index, (hypothesis, target_length) in enumerate(zip(hypotheses, target_lengths)):
@@ -159,6 +210,7 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dataset", choices=("grid", "lrs3"), default="grid")
     parser.add_argument("--data-root", type=Path, default=Path("datasets/grid-pilot"))
     parser.add_argument("--output-dir", type=Path, default=Path("checkpoints/visual-phoneme-mouth"))
     parser.add_argument("--crop", choices=("face", "mouth", "full"), default="mouth")
@@ -176,7 +228,8 @@ def main() -> None:
     parser.add_argument("--landmark-fusion", action="store_true",
                         help=argparse.SUPPRESS)
     parser.add_argument("--architecture", choices=("image", "coordinates", "fusion",
-                                                    "gated-fusion", "tongue-gated-fusion"),
+                                                    "gated-fusion", "tongue-gated-fusion",
+                                                    "large-gated-fusion"),
                         default="image", help="input modality used by this ablation")
     parser.add_argument("--horizontal-flip", action=argparse.BooleanOptionalAction, default=None,
                         help="randomly reflect training images (default: image model only)")
@@ -197,6 +250,8 @@ def main() -> None:
                         help="initialize a gated fusion model's shared coordinate path")
     parser.add_argument("--initialize-image-checkpoint", type=Path,
                         help="initialize gated fusion image encoders from an image model")
+    parser.add_argument("--initialize-checkpoint", type=Path,
+                        help="initialize every tensor from a compatible checkpoint")
     parser.add_argument("--freeze-coordinate-epochs", type=int, default=0,
                         help="train image residuals alone for the first N epochs")
     parser.add_argument("--image-gate-initial-probability", type=float,
@@ -217,6 +272,24 @@ def main() -> None:
     parser.add_argument("--lm-weight", type=float, default=0.0,
                         help="smoothed phone-bigram shallow-fusion weight")
     parser.add_argument("--lm-smoothing", type=float, default=1.0)
+    parser.add_argument("--ctc-upsample-factor", type=int, default=1,
+                        help="repeat each model emission this many times before CTC")
+    parser.add_argument("--lrs3-teacher-labels", type=Path,
+                        help="accepted audio-teacher labels used to make LRS3 training chunks")
+    parser.add_argument("--max-chunk-phones", type=int, default=0,
+                        help="maximum phones per timestamped LRS3 training chunk; zero disables")
+    parser.add_argument("--min-teacher-transcript-agreement", type=float, default=0.8)
+    parser.add_argument("--aligned-frame-loss-weight", type=float, default=0.0,
+                        help="auxiliary CE weight on timestamped nonblank LRS3 frames")
+    parser.add_argument("--frame-only-epochs", type=int, default=0,
+                        help="warm up only on aligned frame labels for this many epochs")
+    parser.add_argument("--ctc-loss-weight", type=float, default=1.0,
+                        help="CTC weight after any aligned-frame warm-up")
+    parser.add_argument("--checkpoint-every", type=int, default=1,
+                        help="save epoch weights every N validations; zero disables")
+    parser.add_argument("--target-inventory", choices=("phones", "visual-groups"),
+                        default="phones",
+                        help="train exact ARPAbet phones or the fixed visual-group partition")
     args = parser.parse_args()
     if (args.image_size < 32 or args.epochs < 1 or args.batch_size < 1 or args.workers < 0
             or (args.max_minutes is not None and args.max_minutes <= 0)):
@@ -230,10 +303,24 @@ def main() -> None:
     if (args.landmark_jitter < 0 or any(not 0 <= value < 1 for value in probabilities)
             or args.max_frame_span < 1 or args.landmark_bottleneck < 0
             or args.weight_decay < 0 or args.lm_weight < 0 or args.lm_smoothing <= 0
-            or args.freeze_coordinate_epochs < 0
+            or args.freeze_coordinate_epochs < 0 or args.ctc_upsample_factor < 1
+            or args.max_chunk_phones < 0
+            or args.aligned_frame_loss_weight < 0
+            or args.frame_only_epochs < 0
+            or args.ctc_loss_weight <= 0
+            or args.checkpoint_every < 0
+            or not 0 <= args.min_teacher_transcript_agreement <= 1
             or not 0 < args.image_gate_initial_probability < 1
             or not 0 < args.inner_mouth_gate_initial_probability < 1):
         parser.error("invalid regularization, bottleneck, weight-decay, or LM setting")
+    if (args.lrs3_teacher_labels is None) != (args.max_chunk_phones == 0):
+        parser.error("--lrs3-teacher-labels requires a positive --max-chunk-phones")
+    if args.lrs3_teacher_labels is not None and args.dataset != "lrs3":
+        parser.error("audio-teacher chunks are supported only for LRS3")
+    if args.aligned_frame_loss_weight and args.lrs3_teacher_labels is None:
+        parser.error("aligned frame loss requires LRS3 teacher chunks")
+    if args.frame_only_epochs and not args.aligned_frame_loss_weight:
+        parser.error("frame-only warm-up requires a positive aligned frame loss weight")
 
     if args.landmark_fusion:
         if args.architecture != "image":
@@ -251,46 +338,105 @@ def main() -> None:
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     include_landmarks = args.architecture in {
-        "coordinates", "fusion", "gated-fusion", "tongue-gated-fusion"
+        "coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
+        "large-gated-fusion"
     }
     include_video = args.architecture in {
-        "image", "fusion", "gated-fusion", "tongue-gated-fusion"
+        "image", "fusion", "gated-fusion", "tongue-gated-fusion",
+        "large-gated-fusion"
     }
-    train = GridClips(args.data_root, "train", args.image_size, args.crop, args.train_limit,
-                      True, include_landmarks, include_video, args.horizontal_flip,
-                      args.coordinate_mode, args.frame_cache_dir, args.coordinate_features,
-                      args.landmark_jitter, args.point_dropout, args.frame_span_dropout,
-                      args.max_frame_span)
-    validation = GridClips(args.data_root, "validation", args.image_size, args.crop,
-                           args.validation_limit, False, include_landmarks, include_video, False,
-                           args.coordinate_mode, args.frame_cache_dir, args.coordinate_features)
+    dataset_class = GridClips if args.dataset == "grid" else Lrs3Clips
+    teacher_options = ({
+        "teacher_labels_dir": args.lrs3_teacher_labels,
+        "max_chunk_phones": args.max_chunk_phones,
+        "min_teacher_transcript_agreement": args.min_teacher_transcript_agreement,
+        "include_frame_targets": bool(args.aligned_frame_loss_weight),
+    } if args.dataset == "lrs3" else {})
+    train = dataset_class(args.data_root, "train", args.image_size, args.crop, args.train_limit,
+                          True, include_landmarks, include_video, args.horizontal_flip,
+                          args.coordinate_mode, args.frame_cache_dir, args.coordinate_features,
+                          args.landmark_jitter, args.point_dropout, args.frame_span_dropout,
+                          args.max_frame_span, **teacher_options)
+    validation = dataset_class(
+        args.data_root, "validation", args.image_size, args.crop,
+        args.validation_limit, False, include_landmarks, include_video, False,
+        args.coordinate_mode, args.frame_cache_dir, args.coordinate_features,
+    )
     collate_functions = {"image": collate_clips, "coordinates": collate_landmark_clips,
                          "fusion": collate_fusion_clips,
                          "gated-fusion": collate_fusion_clips,
-                         "tongue-gated-fusion": collate_fusion_clips}
+                         "tongue-gated-fusion": collate_fusion_clips,
+                         "large-gated-fusion": collate_fusion_clips}
+    aligned_collate_functions = {
+        "image": collate_aligned_clips,
+        "coordinates": collate_aligned_landmark_clips,
+        "fusion": collate_aligned_fusion_clips,
+        "gated-fusion": collate_aligned_fusion_clips,
+        "tongue-gated-fusion": collate_aligned_fusion_clips,
+        "large-gated-fusion": collate_aligned_fusion_clips,
+    }
     loader_args = {"batch_size": args.batch_size, "num_workers": args.workers,
-                   "collate_fn": collate_functions[args.architecture],
                    "pin_memory": device.type == "cuda",
                    "persistent_workers": args.workers > 0}
-    train_loader = DataLoader(train, shuffle=True, **loader_args)
-    validation_loader = DataLoader(validation, shuffle=False, **loader_args)
+    train_loader = DataLoader(
+        train, shuffle=True,
+        collate_fn=(aligned_collate_functions[args.architecture]
+                    if args.aligned_frame_loss_weight else collate_functions[args.architecture]),
+        **loader_args,
+    )
+    validation_loader = DataLoader(
+        validation, shuffle=False, collate_fn=collate_functions[args.architecture],
+        **loader_args,
+    )
     model_classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
                      "fusion": CompactFusionVisualPhoneme,
                      "gated-fusion": CompactGatedFusionVisualPhoneme,
-                     "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme}
+                     "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme,
+                     "large-gated-fusion": LargeGatedFusionVisualPhoneme}
     model_class = model_classes[args.architecture]
-    model_args = {"classes": len(PHONEMES) + 1}
+    output_labels = PHONEMES if args.target_inventory == "phones" else VISUAL_GROUPS
+    target_id_map = None
+    if args.target_inventory == "visual-groups":
+        target_id_map = torch.tensor(PHONE_ID_TO_VISUAL_GROUP_ID, device=device)
+    model_args = {"classes": len(output_labels) + 1}
     if include_landmarks:
         model_args["coordinate_dimensions"] = landmark_feature_dimensions(args.coordinate_features)
-    if args.architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion"}:
+        model_args["landmark_points"] = train.landmark_points
+    if args.architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion",
+                              "large-gated-fusion"}:
         model_args["landmark_bottleneck"] = args.landmark_bottleneck or None
-    if args.architecture in {"gated-fusion", "tongue-gated-fusion"}:
+    if args.architecture in {"gated-fusion", "tongue-gated-fusion",
+                              "large-gated-fusion"}:
         model_args["image_gate_probability"] = args.image_gate_initial_probability
     if args.architecture == "tongue-gated-fusion":
         model_args["inner_mouth_gate_probability"] = args.inner_mouth_gate_initial_probability
     model = model_class(**model_args).to(device)
+    if args.initialize_checkpoint:
+        if (not args.initialize_checkpoint.is_file()
+                or args.initialize_coordinate_checkpoint
+                or args.initialize_image_checkpoint):
+            parser.error("full initialization requires one existing checkpoint and cannot be combined with partial initialization")
+        initial = torch.load(args.initialize_checkpoint, map_location="cpu", weights_only=True)
+        expected = {
+            "architecture": args.architecture,
+            "coordinate_mode": args.coordinate_mode,
+            "coordinate_features": args.coordinate_features,
+            "ctc_upsample_factor": args.ctc_upsample_factor,
+            "target_inventory": args.target_inventory,
+        }
+        mismatches = {
+            key: (initial.get(key, "phones" if key == "target_inventory" else None), value)
+            for key, value in expected.items()
+            if initial.get(key, "phones" if key == "target_inventory" else None) != value
+        }
+        if mismatches:
+            raise ValueError(f"initial checkpoint configuration mismatch: {mismatches}")
+        model.load_state_dict(initial["model"], strict=True)
+        LOGGER.info("initialized complete %s model from epoch %s at %s",
+                    args.architecture, initial.get("epoch"), args.initialize_checkpoint)
     if args.initialize_coordinate_checkpoint:
-        if (args.architecture not in {"gated-fusion", "tongue-gated-fusion"}
+        if (args.architecture not in {"gated-fusion", "tongue-gated-fusion",
+                                     "large-gated-fusion"}
                 or not args.initialize_coordinate_checkpoint.is_file()):
             parser.error("coordinate initialization requires gated fusion and an existing checkpoint")
         initial = torch.load(args.initialize_coordinate_checkpoint, map_location="cpu",
@@ -307,7 +453,8 @@ def main() -> None:
         LOGGER.info("initialized %d coordinate-path tensors from %s", len(compatible),
                     args.initialize_coordinate_checkpoint)
     if args.initialize_image_checkpoint:
-        if (args.architecture not in {"gated-fusion", "tongue-gated-fusion"}
+        if (args.architecture not in {"gated-fusion", "tongue-gated-fusion",
+                                     "large-gated-fusion"}
                 or not args.initialize_image_checkpoint.is_file()):
             parser.error("image initialization requires gated fusion and an existing checkpoint")
         initial = torch.load(args.initialize_image_checkpoint, map_location="cpu",
@@ -340,16 +487,16 @@ def main() -> None:
     loss_fn = nn.CTCLoss(blank=0, zero_infinity=True)
     transition_log_probs = None
     if args.lm_weight:
-        sequences = []
-        for row in train.rows:
-            stem = Path(row["video"]).stem
-            alignment = (args.data_root / "landmark-experiment" / "aligned"
-                         / f"s{row['speaker_id']}" / f"{stem}.json")
-            sequences.append(phoneme_target(str(alignment)))
-        transition_log_probs = fit_bigram_log_probs(sequences, len(PHONEMES) + 1,
-                                                     args.lm_smoothing)
-    LOGGER.info("device=%s parameters=%d train_clips=%d validation_clips=%d crop=%s architecture=%s horizontal_flip=%s",
-                device, model.parameter_count, len(train), len(validation), args.crop,
+        target_sequences = train.target_sequences()
+        if target_id_map is not None:
+            mapping = PHONE_ID_TO_VISUAL_GROUP_ID
+            target_sequences = [tuple(mapping[token] for token in sequence)
+                                for sequence in target_sequences]
+        transition_log_probs = fit_bigram_log_probs(
+            target_sequences, len(output_labels) + 1, args.lm_smoothing,
+        )
+    LOGGER.info("device=%s parameters=%d dataset=%s train_clips=%d validation_clips=%d crop=%s architecture=%s horizontal_flip=%s",
+                device, model.parameter_count, args.dataset, len(train), len(validation), args.crop,
                 args.architecture, args.horizontal_flip)
     if train.excluded or validation.excluded:
         LOGGER.warning("excluded invalid CTC clips: train=%d validation=%d",
@@ -361,7 +508,7 @@ def main() -> None:
     stale = 0
     for epoch in range(1, args.epochs + 1):
         freeze_coordinate_path = (args.architecture in {
-            "gated-fusion", "tongue-gated-fusion"
+            "gated-fusion", "tongue-gated-fusion", "large-gated-fusion"
         } and epoch <= args.freeze_coordinate_epochs)
         for name in ("landmark_encoder", "temporal", "classifier"):
             module = getattr(model, name, None)
@@ -370,11 +517,18 @@ def main() -> None:
                     parameter.requires_grad_(not freeze_coordinate_path)
         if freeze_coordinate_path:
             LOGGER.info("epoch=%d coordinate path frozen for image warm-up", epoch)
+        frame_only = epoch <= args.frame_only_epochs
+        if frame_only:
+            LOGGER.info("epoch=%d CTC disabled for aligned-frame warm-up", epoch)
         training = run_epoch(model, train_loader, loss_fn, device, args.architecture,
                              optimizer, deadline,
                              image_modality_dropout=args.image_modality_dropout,
                              coordinate_modality_dropout=args.coordinate_modality_dropout,
-                             freeze_coordinate_path=freeze_coordinate_path)
+                             freeze_coordinate_path=freeze_coordinate_path,
+                             ctc_upsample_factor=args.ctc_upsample_factor,
+                             aligned_frame_loss_weight=args.aligned_frame_loss_weight,
+                             ctc_loss_weight=0.0 if frame_only else args.ctc_loss_weight,
+                             target_id_map=target_id_map)
         if not training["complete"] or (deadline is not None and time.monotonic() >= deadline):
             LOGGER.warning("stopping before validation because the training time budget is exhausted")
             break
@@ -383,7 +537,9 @@ def main() -> None:
                               top_n=args.top_n, beam_width=args.beam_width,
                               beam_token_top_k=args.beam_token_top_k,
                               transition_log_probs=transition_log_probs,
-                              lm_weight=args.lm_weight)
+                              lm_weight=args.lm_weight,
+                              ctc_upsample_factor=args.ctc_upsample_factor,
+                              target_id_map=target_id_map)
         if args.selection_metric == "top-n-exact":
             selection_key = (-valid["top_n_exact_accuracy"], valid["oracle_per_at_n"])
             # Exact sequence recall is deliberately the selection priority, but
@@ -415,36 +571,56 @@ def main() -> None:
             LOGGER.info("epoch=%d image_gate=%.5f", epoch, model.image_gate)
         if hasattr(model, "inner_mouth_gate"):
             LOGGER.info("epoch=%d inner_mouth_gate=%.5f", epoch, model.inner_mouth_gate)
+        checkpoint = {
+            "model": model.state_dict(), "phones": output_labels, "crop": args.crop,
+            "image_size": args.image_size, "epoch": epoch,
+            "training": training, "validation": valid,
+            "selection_key": list(selection_key),
+            "architecture": args.architecture,
+            "coordinate_mode": args.coordinate_mode,
+            "coordinate_features": args.coordinate_features,
+            "coordinate_dimensions": landmark_feature_dimensions(
+                args.coordinate_features) if include_landmarks else None,
+            "landmark_bottleneck": args.landmark_bottleneck or None,
+            "image_gate_initial_probability": args.image_gate_initial_probability,
+            "image_gate": model.image_gate if hasattr(model, "image_gate") else None,
+            "inner_mouth_gate_initial_probability": (
+                args.inner_mouth_gate_initial_probability
+                if args.architecture == "tongue-gated-fusion" else None),
+            "inner_mouth_gate": (
+                model.inner_mouth_gate if hasattr(model, "inner_mouth_gate") else None),
+            "selection_metric": args.selection_metric,
+            "ctc_upsample_factor": args.ctc_upsample_factor,
+            "decoding": {"top_n": args.top_n, "beam_width": args.beam_width,
+                         "beam_token_top_k": args.beam_token_top_k,
+                         "lm_weight": args.lm_weight,
+                         "lm_smoothing": args.lm_smoothing},
+            "bigram_log_probs": transition_log_probs,
+            "landmark_points": train.landmark_points if include_landmarks else None,
+            "dataset": args.dataset,
+            "target_inventory": args.target_inventory,
+        }
+        if args.checkpoint_every and epoch % args.checkpoint_every == 0:
+            epoch_directory = args.output_dir / "epochs"
+            epoch_directory.mkdir(parents=True, exist_ok=True)
+            torch.save(checkpoint, epoch_directory / f"epoch-{epoch:04d}.pt")
         if selection_key < best_selection_key:
             best_selection_key = selection_key
             selected_checkpoint_per = valid["per"]
             stale = 0
-            torch.save({"model": model.state_dict(), "phones": PHONEMES, "crop": args.crop,
-                        "image_size": args.image_size, "epoch": epoch,
-                        "validation": valid, "architecture": args.architecture,
-                        "coordinate_mode": args.coordinate_mode,
-                        "coordinate_features": args.coordinate_features,
-                        "coordinate_dimensions": landmark_feature_dimensions(
-                            args.coordinate_features) if include_landmarks else None,
-                        "landmark_bottleneck": args.landmark_bottleneck or None,
-                        "image_gate_initial_probability": args.image_gate_initial_probability,
-                        "inner_mouth_gate_initial_probability": (
-                            args.inner_mouth_gate_initial_probability
-                            if args.architecture == "tongue-gated-fusion" else None),
-                        "selection_metric": args.selection_metric,
-                        "decoding": {"top_n": args.top_n, "beam_width": args.beam_width,
-                                     "beam_token_top_k": args.beam_token_top_k,
-                                     "lm_weight": args.lm_weight,
-                                     "lm_smoothing": args.lm_smoothing},
-                        "bigram_log_probs": transition_log_probs,
-                        "landmark_points": 41 if include_landmarks else None}, args.output_dir / "best.pt")
+            torch.save(checkpoint, args.output_dir / "best.pt")
         else:
             stale += 1
         (args.output_dir / "metrics.json").write_text(json.dumps({
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "task": "visual-only face-video to phoneme sequence using CTC",
-            "split": {"train_speakers": list(range(1, 9)), "validation_speakers": [9, 10],
-                      "test_speakers": [11, 12], "test_policy": "not evaluated during development"},
+            "split": ({"train_speakers": list(range(1, 9)),
+                       "validation_speakers": [9, 10], "test_speakers": [11, 12],
+                       "test_policy": "not evaluated during development"}
+                      if args.dataset == "grid" else
+                      {"train": "LRS3 trainval excluding AV-HuBERT validation IDs",
+                       "validation": "official AV-HuBERT 1,200-ID validation list",
+                       "test": "separate 1,321-utterance parquet; not evaluated during development"}),
             "excluded_invalid_ctc": {"train": train.excluded, "validation": validation.excluded},
             "model_parameters": model.parameter_count, "device": str(device),
             "arguments": vars(args) | {
@@ -457,6 +633,10 @@ def main() -> None:
                 "initialize_image_checkpoint": (
                     str(args.initialize_image_checkpoint)
                     if args.initialize_image_checkpoint else None),
+                "initialize_checkpoint": (
+                    str(args.initialize_checkpoint) if args.initialize_checkpoint else None),
+                "lrs3_teacher_labels": (
+                    str(args.lrs3_teacher_labels) if args.lrs3_teacher_labels else None),
             },
             "history": history, "best_validation_per": best_per,
             "selected_checkpoint_validation_per": selected_checkpoint_per,
