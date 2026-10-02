@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timezone
 import json
 import logging
+import math
 from pathlib import Path
 import random
+import signal
 import sys
 import time
 
@@ -23,14 +26,116 @@ from VisualPhoneme.data import (GridClips, PHONEMES, collate_aligned_clips,
                                 ctc_prefix_beam_search, fit_bigram_log_probs,
                                 greedy_decode, landmark_feature_dimensions)
 from VisualPhoneme.lrs3_data import Lrs3Clips
-from VisualPhoneme.model import (CompactFusionVisualPhoneme,
+from VisualPhoneme.model import (AutoAvsrFusionVisualPhoneme,
+                                 CompactFusionVisualPhoneme,
                                  CompactGatedFusionVisualPhoneme,
                                  CompactLandmarkPhoneme,
                                  CompactTongueGatedFusionVisualPhoneme,
                                  CompactVisualPhoneme,
-                                 LargeGatedFusionVisualPhoneme)
-from VisualPhoneme.visemes import PHONE_ID_TO_VISUAL_GROUP_ID, VISUAL_GROUPS
+                                 LargeGatedFusionVisualPhoneme,
+                                 LargeVisualPhoneme,
+                                 LargeTransformerFusionVisualPhoneme)
+from VisualPhoneme.visemes import (PHONE_ID_TO_VISUAL_GROUP_ID,
+                                   PHONE_ID_TO_VISUAL_GROUP_ID_WITH_REST,
+                                   VISUAL_GROUPS, VISUAL_GROUPS_WITH_REST)
+from VisualPhoneme.thermal import ThermalGuard
 LOGGER = logging.getLogger("visual_phoneme")
+
+
+class PauseController:
+    def __init__(self, marker: Path):
+        self.marker = marker
+        self.requested = False
+
+    def request(self, signum, _frame) -> None:
+        self.requested = True
+        LOGGER.warning("pause requested by signal %s; saving after the current batch", signum)
+
+    def should_pause(self) -> bool:
+        return self.requested or self.marker.exists()
+
+
+def random_state() -> dict:
+    numpy_state = np.random.get_state()
+    return {
+        "python": random.getstate(),
+        "numpy": (numpy_state[0], numpy_state[1].tolist(), numpy_state[2],
+                  numpy_state[3], numpy_state[4]),
+        "torch": torch.get_rng_state(),
+        "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
+    }
+
+
+def restore_random_state(state: dict) -> None:
+    random.setstate(state["python"])
+    numpy_state = state["numpy"]
+    np.random.set_state((numpy_state[0], np.asarray(numpy_state[1], dtype=np.uint32),
+                         numpy_state[2], numpy_state[3], numpy_state[4]))
+    torch.set_rng_state(state["torch"].cpu())
+    if torch.cuda.is_available() and state["cuda"]:
+        torch.cuda.set_rng_state_all([s.cpu() for s in state["cuda"]])
+
+
+def save_training_state(path: Path, model, optimizer, scheduler, args, resume_epoch: int,
+                        history: list, best_per: float, selected_checkpoint_per: float,
+                        best_selection_key: tuple, stale: int) -> None:
+    """Save all state needed to restart training at an epoch boundary."""
+    state = {
+        "format": "visual-phoneme-training-state-0.1",
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict(),
+        "resume_epoch": resume_epoch,
+        "history": history,
+        "best_per": best_per,
+        "selected_checkpoint_per": selected_checkpoint_per,
+        "best_selection_key": list(best_selection_key),
+        "stale": stale,
+        "random_state": random_state(),
+        "architecture": args.architecture,
+        "coordinate_mode": args.coordinate_mode,
+        "coordinate_features": args.coordinate_features,
+        "ctc_upsample_factor": args.ctc_upsample_factor,
+        "target_inventory": args.target_inventory,
+    }
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(state, temporary)
+    temporary.replace(path)
+    LOGGER.info("saved resumable training state at epoch=%d to %s", resume_epoch, path)
+
+
+def validate_resume_configuration(state: dict, args) -> None:
+    expected = {
+        "architecture": args.architecture,
+        "coordinate_mode": args.coordinate_mode,
+        "coordinate_features": args.coordinate_features,
+        "ctc_upsample_factor": args.ctc_upsample_factor,
+        "target_inventory": args.target_inventory,
+    }
+    mismatches = {key: (state.get(key), value) for key, value in expected.items()
+                  if state.get(key) != value}
+    if mismatches:
+        raise ValueError(f"resume-state configuration mismatch: {mismatches}")
+
+
+def total_failure_reason(training: dict, valid: dict, min_valid_loss: float,
+                         divergence_factor: float) -> str | None:
+    """Return a reason string when a run has totally failed (diverged), else None.
+
+    A run counts as a total failure when a tracked loss or metric becomes
+    non-finite, or when the validation loss explodes past ``divergence_factor``
+    times the lowest validation loss seen so far in the run.
+    """
+    if not (math.isfinite(training["loss"])
+            and math.isfinite(valid["loss"])
+            and math.isfinite(valid["per"])
+            and math.isfinite(valid.get("oracle_per_at_n", 0.0))):
+        return "non-finite loss or PER (diverged)"
+    if (divergence_factor > 0 and math.isfinite(min_valid_loss)
+            and valid["loss"] > divergence_factor * min_valid_loss):
+        return (f"validation loss {valid['loss']:.4f} exceeded "
+                f"{divergence_factor:.1f}x the running minimum {min_valid_loss:.4f}")
+    return None
 
 
 def configure_logging(output_dir: Path) -> None:
@@ -82,21 +187,28 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
               top_n=1, beam_width=1, beam_token_top_k=None,
               transition_log_probs=None, lm_weight=0.0,
               image_modality_dropout=0.0, coordinate_modality_dropout=0.0,
-              freeze_coordinate_path=False, ctc_upsample_factor=1,
+              freeze_coordinate_path=False, freeze_image_path=False,
+              ctc_upsample_factor=1,
               aligned_frame_loss_weight=0.0, ctc_loss_weight=1.0,
-              target_id_map=None):
+              target_id_map=None, should_pause=None):
     training = optimizer is not None
     model.train(training)
     if training and freeze_coordinate_path:
         for name in ("landmark_encoder", "temporal", "classifier"):
             getattr(model, name).eval()
+    if training and freeze_image_path:
+        model.frame_encoder.eval()
     total_loss = total_errors = total_phones = clips = 0
     oracle_errors = exact_hits = 0
     started = time.perf_counter()
     for step, batch in enumerate(loader, 1):
+        if should_pause is not None and should_pause():
+            LOGGER.warning("pause observed before step=%d", step)
+            break
         frame_targets = None
         if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                            "large-gated-fusion"}:
+                            "large-gated-fusion", "large-transformer-fusion",
+                            "autoavsr-fusion"}:
             if training and aligned_frame_loss_weight:
                 (video, landmarks, landmark_mask, targets, lengths, target_lengths,
                  frame_targets, _) = batch
@@ -129,7 +241,8 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
                     frame_targets[valid_frame_targets]
                 ]
         if training and architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                                         "large-gated-fusion"}:
+                                         "large-gated-fusion", "large-transformer-fusion",
+                                         "autoavsr-fusion"}:
             if image_modality_dropout:
                 dropped = torch.rand(len(video), device=device) < image_modality_dropout
                 video[dropped] = 0
@@ -141,7 +254,8 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
             optimizer.zero_grad(set_to_none=True)
         with torch.set_grad_enabled(training):
             if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                                "large-gated-fusion"}:
+                                "large-gated-fusion", "large-transformer-fusion",
+                                "autoavsr-fusion"}:
                 logits = model(video, landmarks, landmark_mask)
             elif architecture == "coordinates":
                 logits = model(landmarks, landmark_mask)
@@ -194,10 +308,12 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
         if deadline is not None and time.monotonic() >= deadline:
             LOGGER.warning("training time budget reached after %d clips", clips)
             break
-    result = {"loss": total_loss / clips, "per": total_errors / total_phones,
+    result = {"loss": total_loss / max(clips, 1),
+              "per": total_errors / max(total_phones, 1),
               "errors": total_errors, "phones": total_phones, "clips": clips,
               "seconds": time.perf_counter() - started,
-              "complete": clips == len(loader.dataset)}
+              "complete": clips == len(loader.dataset),
+              "paused": bool(should_pause is not None and should_pause())}
     if not training and top_n > 1:
         result.update({"top_n": top_n, "beam_width": beam_width,
                        "beam_token_top_k": beam_token_top_k,
@@ -208,7 +324,7 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
     return result
 
 
-def main() -> None:
+def _main(resources: ExitStack) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", choices=("grid", "lrs3"), default="grid")
     parser.add_argument("--data-root", type=Path, default=Path("datasets/grid-pilot"))
@@ -219,22 +335,33 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--frontend-learning-rate", type=float,
+                        help="optional lower learning rate for frame_encoder parameters")
     parser.add_argument("--seed", type=int, default=20260911)
     parser.add_argument("--train-limit", type=int)
     parser.add_argument("--validation-limit", type=int)
     parser.add_argument("--patience", type=int, default=6)
     parser.add_argument("--max-minutes", type=float,
                         help="stop cleanly before starting validation once this wall-time budget is reached")
+    parser.add_argument("--divergence-factor", type=float, default=5.0,
+                        help="abort as a total failure when validation loss exceeds this many "
+                             "times its running minimum (zero disables)")
+    parser.add_argument("--baseline-failure-epochs", type=int, default=0,
+                        help="abort as a total failure after this many epochs without beating "
+                             "the checkpoint the run was initialized or resumed from (zero disables)")
     parser.add_argument("--landmark-fusion", action="store_true",
                         help=argparse.SUPPRESS)
-    parser.add_argument("--architecture", choices=("image", "coordinates", "fusion",
+    parser.add_argument("--architecture", choices=("image", "large-image", "coordinates", "fusion",
                                                     "gated-fusion", "tongue-gated-fusion",
-                                                    "large-gated-fusion"),
+                                                    "large-gated-fusion",
+                                                    "large-transformer-fusion",
+                                                    "autoavsr-fusion"),
                         default="image", help="input modality used by this ablation")
     parser.add_argument("--horizontal-flip", action=argparse.BooleanOptionalAction, default=None,
                         help="randomly reflect training images (default: image model only)")
     parser.add_argument("--coordinate-mode",
-                        choices=("eye-normalized", "clip-centered", "constant"),
+                        choices=("eye-normalized", "pose-frontalized",
+                                 "clip-centered", "constant"),
                         default="eye-normalized",
                         help="landmark representation; constant is a duration/grammar control")
     parser.add_argument("--coordinate-features", choices=("position", "motion"),
@@ -252,8 +379,18 @@ def main() -> None:
                         help="initialize gated fusion image encoders from an image model")
     parser.add_argument("--initialize-checkpoint", type=Path,
                         help="initialize every tensor from a compatible checkpoint")
+    parser.add_argument("--initialize-rest-checkpoint", type=Path,
+                        help="expand a visual-group checkpoint with a new REST output")
+    parser.add_argument("--resume-state", type=Path,
+                        help="restore a pausable training state including optimizer and history")
+    parser.add_argument("--pause-file", type=Path,
+                        help="pause at a batch boundary when this marker exists (default: OUTPUT/PAUSE)")
     parser.add_argument("--freeze-coordinate-epochs", type=int, default=0,
                         help="train image residuals alone for the first N epochs")
+    parser.add_argument("--freeze-image-epochs", type=int, default=0,
+                        help="freeze a pretrained image frontend for the first N epochs")
+    parser.add_argument("--pretrained-visual-frontend", type=Path,
+                        help="published Auto-AVSR model.pth used to initialize its frontend")
     parser.add_argument("--image-gate-initial-probability", type=float,
                         default=0.002472623)
     parser.add_argument("--inner-mouth-gate-initial-probability", type=float, default=0.05)
@@ -279,6 +416,8 @@ def main() -> None:
     parser.add_argument("--max-chunk-phones", type=int, default=0,
                         help="maximum phones per timestamped LRS3 training chunk; zero disables")
     parser.add_argument("--min-teacher-transcript-agreement", type=float, default=0.8)
+    parser.add_argument("--min-rest-seconds", type=float, default=0.08,
+                        help="minimum forced-aligned inter-word gap labeled REST")
     parser.add_argument("--aligned-frame-loss-weight", type=float, default=0.0,
                         help="auxiliary CE weight on timestamped nonblank LRS3 frames")
     parser.add_argument("--frame-only-epochs", type=int, default=0,
@@ -287,7 +426,8 @@ def main() -> None:
                         help="CTC weight after any aligned-frame warm-up")
     parser.add_argument("--checkpoint-every", type=int, default=1,
                         help="save epoch weights every N validations; zero disables")
-    parser.add_argument("--target-inventory", choices=("phones", "visual-groups"),
+    parser.add_argument("--target-inventory",
+                        choices=("phones", "visual-groups", "visual-groups-rest"),
                         default="phones",
                         help="train exact ARPAbet phones or the fixed visual-group partition")
     args = parser.parse_args()
@@ -302,48 +442,74 @@ def main() -> None:
                      args.image_modality_dropout, args.coordinate_modality_dropout)
     if (args.landmark_jitter < 0 or any(not 0 <= value < 1 for value in probabilities)
             or args.max_frame_span < 1 or args.landmark_bottleneck < 0
-            or args.weight_decay < 0 or args.lm_weight < 0 or args.lm_smoothing <= 0
-            or args.freeze_coordinate_epochs < 0 or args.ctc_upsample_factor < 1
+            or args.weight_decay < 0 or args.learning_rate <= 0
+            or (args.frontend_learning_rate is not None
+                and args.frontend_learning_rate <= 0)
+            or args.lm_weight < 0 or args.lm_smoothing <= 0
+            or args.freeze_coordinate_epochs < 0 or args.freeze_image_epochs < 0
+            or args.ctc_upsample_factor < 1
             or args.max_chunk_phones < 0
+            or args.min_rest_seconds < 0
             or args.aligned_frame_loss_weight < 0
             or args.frame_only_epochs < 0
             or args.ctc_loss_weight <= 0
             or args.checkpoint_every < 0
             or not 0 <= args.min_teacher_transcript_agreement <= 1
             or not 0 < args.image_gate_initial_probability < 1
-            or not 0 < args.inner_mouth_gate_initial_probability < 1):
+            or not 0 < args.inner_mouth_gate_initial_probability < 1
+            or args.divergence_factor < 0
+            or args.baseline_failure_epochs < 0):
         parser.error("invalid regularization, bottleneck, weight-decay, or LM setting")
     if (args.lrs3_teacher_labels is None) != (args.max_chunk_phones == 0):
         parser.error("--lrs3-teacher-labels requires a positive --max-chunk-phones")
     if args.lrs3_teacher_labels is not None and args.dataset != "lrs3":
         parser.error("audio-teacher chunks are supported only for LRS3")
+    if args.coordinate_mode == "pose-frontalized" and args.dataset != "lrs3":
+        parser.error("pose-frontalized coordinates require LRS3 68-point landmarks")
     if args.aligned_frame_loss_weight and args.lrs3_teacher_labels is None:
         parser.error("aligned frame loss requires LRS3 teacher chunks")
+    if args.target_inventory == "visual-groups-rest" and args.lrs3_teacher_labels is None:
+        parser.error("REST targets require forced-aligned LRS3 teacher labels")
     if args.frame_only_epochs and not args.aligned_frame_loss_weight:
         parser.error("frame-only warm-up requires a positive aligned frame loss weight")
+    if ((args.architecture == "autoavsr-fusion")
+            != (args.pretrained_visual_frontend is not None)):
+        parser.error("autoavsr-fusion requires exactly one --pretrained-visual-frontend")
+    if (args.pretrained_visual_frontend is not None
+            and not args.pretrained_visual_frontend.is_file()):
+        parser.error("pretrained visual frontend checkpoint does not exist")
+    if args.resume_state and (not args.resume_state.is_file()
+                              or args.initialize_checkpoint or args.initialize_rest_checkpoint
+                              or args.initialize_coordinate_checkpoint
+                              or args.initialize_image_checkpoint):
+        parser.error("--resume-state must exist and cannot be combined with initialization")
 
     if args.landmark_fusion:
         if args.architecture != "image":
             parser.error("--landmark-fusion cannot be combined with --architecture")
         args.architecture = "fusion"
     if args.horizontal_flip is None:
-        args.horizontal_flip = args.architecture == "image"
-    if args.horizontal_flip and args.architecture != "image":
+        args.horizontal_flip = args.architecture in {"image", "large-image"}
+    if args.horizontal_flip and args.architecture not in {"image", "large-image"}:
         parser.error("horizontal reflection requires an image-only model until landmark permutation exists")
-    if args.coordinate_mode != "eye-normalized" and args.architecture == "image":
+    if args.coordinate_mode != "eye-normalized" and args.architecture in {"image", "large-image"}:
         parser.error("--coordinate-mode applies only to coordinates or fusion")
 
     configure_logging(args.output_dir)
+    pause = PauseController(args.pause_file or args.output_dir / "PAUSE")
+    signal.signal(signal.SIGINT, pause.request)
+    signal.signal(signal.SIGTERM, pause.request)
     deadline = time.monotonic() + args.max_minutes * 60 if args.max_minutes is not None else None
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    resources.enter_context(ThermalGuard(args.output_dir, device.type == "cuda"))
     include_landmarks = args.architecture in {
         "coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
-        "large-gated-fusion"
+        "large-gated-fusion", "large-transformer-fusion", "autoavsr-fusion"
     }
     include_video = args.architecture in {
-        "image", "fusion", "gated-fusion", "tongue-gated-fusion",
-        "large-gated-fusion"
+        "image", "large-image", "fusion", "gated-fusion", "tongue-gated-fusion",
+        "large-gated-fusion", "large-transformer-fusion", "autoavsr-fusion"
     }
     dataset_class = GridClips if args.dataset == "grid" else Lrs3Clips
     teacher_options = ({
@@ -351,29 +517,40 @@ def main() -> None:
         "max_chunk_phones": args.max_chunk_phones,
         "min_teacher_transcript_agreement": args.min_teacher_transcript_agreement,
         "include_frame_targets": bool(args.aligned_frame_loss_weight),
+        "include_rest_targets": args.target_inventory == "visual-groups-rest",
+        "min_rest_seconds": args.min_rest_seconds,
     } if args.dataset == "lrs3" else {})
     train = dataset_class(args.data_root, "train", args.image_size, args.crop, args.train_limit,
                           True, include_landmarks, include_video, args.horizontal_flip,
                           args.coordinate_mode, args.frame_cache_dir, args.coordinate_features,
                           args.landmark_jitter, args.point_dropout, args.frame_span_dropout,
                           args.max_frame_span, **teacher_options)
+    validation_teacher_options = dict(teacher_options)
+    validation_teacher_options["include_frame_targets"] = False
     validation = dataset_class(
         args.data_root, "validation", args.image_size, args.crop,
         args.validation_limit, False, include_landmarks, include_video, False,
         args.coordinate_mode, args.frame_cache_dir, args.coordinate_features,
+        **validation_teacher_options,
     )
-    collate_functions = {"image": collate_clips, "coordinates": collate_landmark_clips,
+    collate_functions = {"image": collate_clips, "large-image": collate_clips,
+                         "coordinates": collate_landmark_clips,
                          "fusion": collate_fusion_clips,
                          "gated-fusion": collate_fusion_clips,
                          "tongue-gated-fusion": collate_fusion_clips,
-                         "large-gated-fusion": collate_fusion_clips}
+                         "large-gated-fusion": collate_fusion_clips,
+                         "large-transformer-fusion": collate_fusion_clips,
+                         "autoavsr-fusion": collate_fusion_clips}
     aligned_collate_functions = {
         "image": collate_aligned_clips,
+        "large-image": collate_aligned_clips,
         "coordinates": collate_aligned_landmark_clips,
         "fusion": collate_aligned_fusion_clips,
         "gated-fusion": collate_aligned_fusion_clips,
         "tongue-gated-fusion": collate_aligned_fusion_clips,
         "large-gated-fusion": collate_aligned_fusion_clips,
+        "large-transformer-fusion": collate_aligned_fusion_clips,
+        "autoavsr-fusion": collate_aligned_fusion_clips,
     }
     loader_args = {"batch_size": args.batch_size, "num_workers": args.workers,
                    "pin_memory": device.type == "cuda",
@@ -388,31 +565,56 @@ def main() -> None:
         validation, shuffle=False, collate_fn=collate_functions[args.architecture],
         **loader_args,
     )
-    model_classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
+    model_classes = {"image": CompactVisualPhoneme, "large-image": LargeVisualPhoneme,
+                     "coordinates": CompactLandmarkPhoneme,
                      "fusion": CompactFusionVisualPhoneme,
                      "gated-fusion": CompactGatedFusionVisualPhoneme,
                      "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme,
-                     "large-gated-fusion": LargeGatedFusionVisualPhoneme}
+                     "large-gated-fusion": LargeGatedFusionVisualPhoneme,
+                     "large-transformer-fusion": LargeTransformerFusionVisualPhoneme,
+                     "autoavsr-fusion": AutoAvsrFusionVisualPhoneme}
     model_class = model_classes[args.architecture]
-    output_labels = PHONEMES if args.target_inventory == "phones" else VISUAL_GROUPS
+    output_labels = ({"phones": PHONEMES, "visual-groups": VISUAL_GROUPS,
+                      "visual-groups-rest": VISUAL_GROUPS_WITH_REST}[args.target_inventory])
     target_id_map = None
-    if args.target_inventory == "visual-groups":
-        target_id_map = torch.tensor(PHONE_ID_TO_VISUAL_GROUP_ID, device=device)
+    if args.target_inventory in {"visual-groups", "visual-groups-rest"}:
+        mapping = (PHONE_ID_TO_VISUAL_GROUP_ID_WITH_REST
+                   if args.target_inventory == "visual-groups-rest"
+                   else PHONE_ID_TO_VISUAL_GROUP_ID)
+        target_id_map = torch.tensor(mapping, device=device)
     model_args = {"classes": len(output_labels) + 1}
     if include_landmarks:
         model_args["coordinate_dimensions"] = landmark_feature_dimensions(args.coordinate_features)
         model_args["landmark_points"] = train.landmark_points
     if args.architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion",
-                              "large-gated-fusion"}:
+                              "large-gated-fusion", "large-transformer-fusion",
+                              "autoavsr-fusion"}:
         model_args["landmark_bottleneck"] = args.landmark_bottleneck or None
     if args.architecture in {"gated-fusion", "tongue-gated-fusion",
-                              "large-gated-fusion"}:
+                              "large-gated-fusion", "large-transformer-fusion",
+                              "autoavsr-fusion"}:
         model_args["image_gate_probability"] = args.image_gate_initial_probability
     if args.architecture == "tongue-gated-fusion":
         model_args["inner_mouth_gate_probability"] = args.inner_mouth_gate_initial_probability
     model = model_class(**model_args).to(device)
+    if args.pretrained_visual_frontend:
+        source = torch.load(args.pretrained_visual_frontend, map_location="cpu",
+                            weights_only=True)
+        prefix = "encoder.frontend."
+        frontend_state = {
+            name.removeprefix(prefix): value for name, value in source.items()
+            if name.startswith(prefix)
+        }
+        missing, unexpected = model.frame_encoder.load_state_dict(frontend_state, strict=False)
+        if missing or unexpected:
+            raise ValueError(
+                f"Auto-AVSR frontend mismatch: missing={missing[:3]} unexpected={unexpected[:3]}"
+            )
+        LOGGER.info("initialized %d visual frontend tensors from %s",
+                    len(frontend_state), args.pretrained_visual_frontend)
     if args.initialize_checkpoint:
         if (not args.initialize_checkpoint.is_file()
+                or args.initialize_rest_checkpoint
                 or args.initialize_coordinate_checkpoint
                 or args.initialize_image_checkpoint):
             parser.error("full initialization requires one existing checkpoint and cannot be combined with partial initialization")
@@ -434,9 +636,34 @@ def main() -> None:
         model.load_state_dict(initial["model"], strict=True)
         LOGGER.info("initialized complete %s model from epoch %s at %s",
                     args.architecture, initial.get("epoch"), args.initialize_checkpoint)
+    if args.initialize_rest_checkpoint:
+        if (args.target_inventory != "visual-groups-rest"
+                or not args.initialize_rest_checkpoint.is_file()
+                or args.initialize_checkpoint or args.initialize_coordinate_checkpoint
+                or args.initialize_image_checkpoint):
+            parser.error("REST initialization requires one visual-group checkpoint")
+        initial = torch.load(args.initialize_rest_checkpoint, map_location="cpu",
+                             weights_only=True)
+        if (initial.get("architecture") != args.architecture
+                or initial.get("target_inventory") != "visual-groups"
+                or tuple(initial.get("phones", ())) != VISUAL_GROUPS):
+            raise ValueError("REST initializer must be a matching visual-group checkpoint")
+        source = initial["model"]
+        destination = model.state_dict()
+        compatible = {name: value for name, value in source.items()
+                      if name in destination and destination[name].shape == value.shape}
+        model.load_state_dict(compatible, strict=False)
+        with torch.no_grad():
+            model.classifier.weight[:len(VISUAL_GROUPS) + 1].copy_(
+                source["classifier.weight"])
+            model.classifier.bias[:len(VISUAL_GROUPS) + 1].copy_(
+                source["classifier.bias"])
+        LOGGER.info("expanded %s epoch %s with a randomly initialized REST output",
+                    args.initialize_rest_checkpoint, initial.get("epoch"))
     if args.initialize_coordinate_checkpoint:
         if (args.architecture not in {"gated-fusion", "tongue-gated-fusion",
-                                     "large-gated-fusion"}
+                                     "large-gated-fusion", "large-transformer-fusion",
+                                     "autoavsr-fusion"}
                 or not args.initialize_coordinate_checkpoint.is_file()):
             parser.error("coordinate initialization requires gated fusion and an existing checkpoint")
         initial = torch.load(args.initialize_coordinate_checkpoint, map_location="cpu",
@@ -454,14 +681,15 @@ def main() -> None:
                     args.initialize_coordinate_checkpoint)
     if args.initialize_image_checkpoint:
         if (args.architecture not in {"gated-fusion", "tongue-gated-fusion",
-                                     "large-gated-fusion"}
+                                     "large-gated-fusion", "large-transformer-fusion",
+                                     "autoavsr-fusion"}
                 or not args.initialize_image_checkpoint.is_file()):
             parser.error("image initialization requires gated fusion and an existing checkpoint")
         initial = torch.load(args.initialize_image_checkpoint, map_location="cpu",
                              weights_only=True)
         source = initial["model"]
         image_state = {name: value for name, value in source.items()
-                       if name.startswith("frame_encoder.")
+                       if name.startswith(("frame_encoder.", "image_projection."))
                        and name in model.state_dict()
                        and model.state_dict()[name].shape == value.shape}
         if not image_state:
@@ -481,7 +709,19 @@ def main() -> None:
             copied += len(tongue_state)
         LOGGER.info("initialized %d image-path tensors from %s", copied,
                     args.initialize_image_checkpoint)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate,
+    if args.frontend_learning_rate is not None:
+        frontend_parameters = list(model.frame_encoder.parameters())
+        frontend_ids = {id(parameter) for parameter in frontend_parameters}
+        other_parameters = [parameter for parameter in model.parameters()
+                            if id(parameter) not in frontend_ids]
+        optimizer_parameters = [
+            {"params": other_parameters, "lr": args.learning_rate, "name": "main"},
+            {"params": frontend_parameters, "lr": args.frontend_learning_rate,
+             "name": "frontend"},
+        ]
+    else:
+        optimizer_parameters = model.parameters()
+    optimizer = torch.optim.AdamW(optimizer_parameters, lr=args.learning_rate,
                                   weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=2, factor=0.5)
     loss_fn = nn.CTCLoss(blank=0, zero_infinity=True)
@@ -489,7 +729,6 @@ def main() -> None:
     if args.lm_weight:
         target_sequences = train.target_sequences()
         if target_id_map is not None:
-            mapping = PHONE_ID_TO_VISUAL_GROUP_ID
             target_sequences = [tuple(mapping[token] for token in sequence)
                                 for sequence in target_sequences]
         transition_log_probs = fit_bigram_log_probs(
@@ -500,16 +739,39 @@ def main() -> None:
                 args.architecture, args.horizontal_flip)
     if train.excluded or validation.excluded:
         LOGGER.warning("excluded invalid CTC clips: train=%d validation=%d",
-                       len(train.excluded), len(validation.excluded))
+                       getattr(train, "excluded_total", len(train.excluded)),
+                       getattr(validation, "excluded_total", len(validation.excluded)))
 
     history = []
     best_per = selected_checkpoint_per = float("inf")
     best_selection_key = (float("inf"),)
     stale = 0
-    for epoch in range(1, args.epochs + 1):
+    start_epoch = 1
+    if args.resume_state:
+        resume = torch.load(args.resume_state, map_location=device, weights_only=True)
+        validate_resume_configuration(resume, args)
+        model.load_state_dict(resume["model"], strict=True)
+        optimizer.load_state_dict(resume["optimizer"])
+        scheduler.load_state_dict(resume["scheduler"])
+        history = resume["history"]
+        best_per = resume["best_per"]
+        selected_checkpoint_per = resume["selected_checkpoint_per"]
+        best_selection_key = tuple(resume["best_selection_key"])
+        stale = resume["stale"]
+        start_epoch = resume["resume_epoch"]
+        restore_random_state(resume["random_state"])
+        LOGGER.info("resumed epoch=%d history=%d stale=%d from %s",
+                    start_epoch, len(history), stale, args.resume_state)
+    resume_path = args.output_dir / "resume.pt"
+    min_valid_loss = min((h["validation"]["loss"] for h in history
+                          if math.isfinite(h["validation"]["loss"])),
+                         default=float("inf"))
+    for epoch in range(start_epoch, args.epochs + 1):
         freeze_coordinate_path = (args.architecture in {
-            "gated-fusion", "tongue-gated-fusion", "large-gated-fusion"
+            "gated-fusion", "tongue-gated-fusion", "large-gated-fusion",
+            "large-transformer-fusion", "autoavsr-fusion"
         } and epoch <= args.freeze_coordinate_epochs)
+        freeze_image_path = epoch <= args.freeze_image_epochs
         for name in ("landmark_encoder", "temporal", "classifier"):
             module = getattr(model, name, None)
             if module is not None:
@@ -517,6 +779,10 @@ def main() -> None:
                     parameter.requires_grad_(not freeze_coordinate_path)
         if freeze_coordinate_path:
             LOGGER.info("epoch=%d coordinate path frozen for image warm-up", epoch)
+        for parameter in model.frame_encoder.parameters():
+            parameter.requires_grad_(not freeze_image_path)
+        if freeze_image_path:
+            LOGGER.info("epoch=%d pretrained image frontend frozen", epoch)
         frame_only = epoch <= args.frame_only_epochs
         if frame_only:
             LOGGER.info("epoch=%d CTC disabled for aligned-frame warm-up", epoch)
@@ -525,12 +791,18 @@ def main() -> None:
                              image_modality_dropout=args.image_modality_dropout,
                              coordinate_modality_dropout=args.coordinate_modality_dropout,
                              freeze_coordinate_path=freeze_coordinate_path,
+                             freeze_image_path=freeze_image_path,
                              ctc_upsample_factor=args.ctc_upsample_factor,
                              aligned_frame_loss_weight=args.aligned_frame_loss_weight,
                              ctc_loss_weight=0.0 if frame_only else args.ctc_loss_weight,
-                             target_id_map=target_id_map)
+                             target_id_map=target_id_map,
+                             should_pause=pause.should_pause)
         if not training["complete"] or (deadline is not None and time.monotonic() >= deadline):
-            LOGGER.warning("stopping before validation because the training time budget is exhausted")
+            save_training_state(resume_path, model, optimizer, scheduler, args, epoch,
+                                history, best_per, selected_checkpoint_per,
+                                best_selection_key, stale)
+            reason = "pause requested" if training["paused"] else "time budget exhausted"
+            LOGGER.warning("stopping before validation because %s", reason)
             break
         with torch.inference_mode():
             valid = run_epoch(model, validation_loader, loss_fn, device, args.architecture,
@@ -540,6 +812,15 @@ def main() -> None:
                               lm_weight=args.lm_weight,
                               ctc_upsample_factor=args.ctc_upsample_factor,
                               target_id_map=target_id_map)
+        failure_reason = total_failure_reason(training, valid, min_valid_loss,
+                                              args.divergence_factor)
+        if failure_reason is not None:
+            LOGGER.error("TOTAL FAILURE at epoch=%d: %s", epoch, failure_reason)
+            save_training_state(resume_path, model, optimizer, scheduler, args, epoch,
+                                history, best_per, selected_checkpoint_per,
+                                best_selection_key, stale)
+            break
+        min_valid_loss = min(min_valid_loss, valid["loss"])
         if args.selection_metric == "top-n-exact":
             selection_key = (-valid["top_n_exact_accuracy"], valid["oracle_per_at_n"])
             # Exact sequence recall is deliberately the selection priority, but
@@ -555,6 +836,8 @@ def main() -> None:
         scheduler.step(scheduler_value)
         row = {"epoch": epoch, "train": training, "validation": valid,
                "learning_rate": optimizer.param_groups[0]["lr"]}
+        if args.frontend_learning_rate is not None:
+            row["frontend_learning_rate"] = optimizer.param_groups[1]["lr"]
         if hasattr(model, "image_gate"):
             row["image_gate"] = model.image_gate
         if hasattr(model, "inner_mouth_gate"):
@@ -621,7 +904,13 @@ def main() -> None:
                       {"train": "LRS3 trainval excluding AV-HuBERT validation IDs",
                        "validation": "official AV-HuBERT 1,200-ID validation list",
                        "test": "separate 1,321-utterance parquet; not evaluated during development"}),
-            "excluded_invalid_ctc": {"train": train.excluded, "validation": validation.excluded},
+            "excluded_invalid_ctc": {
+                "train": {"count": getattr(train, "excluded_total", len(train.excluded)),
+                          "examples": train.excluded[:100]},
+                "validation": {"count": getattr(validation, "excluded_total",
+                                                   len(validation.excluded)),
+                               "examples": validation.excluded[:100]},
+            },
             "model_parameters": model.parameter_count, "device": str(device),
             "arguments": vars(args) | {
                 "data_root": str(args.data_root),
@@ -635,6 +924,14 @@ def main() -> None:
                     if args.initialize_image_checkpoint else None),
                 "initialize_checkpoint": (
                     str(args.initialize_checkpoint) if args.initialize_checkpoint else None),
+                "initialize_rest_checkpoint": (
+                    str(args.initialize_rest_checkpoint)
+                    if args.initialize_rest_checkpoint else None),
+                "resume_state": str(args.resume_state) if args.resume_state else None,
+                "pause_file": str(args.pause_file) if args.pause_file else None,
+                "pretrained_visual_frontend": (
+                    str(args.pretrained_visual_frontend)
+                    if args.pretrained_visual_frontend else None),
                 "lrs3_teacher_labels": (
                     str(args.lrs3_teacher_labels) if args.lrs3_teacher_labels else None),
             },
@@ -643,11 +940,24 @@ def main() -> None:
             "selection_metric": args.selection_metric,
             "best_selection_key": list(best_selection_key),
         }, indent=2) + "\n")
+        save_training_state(resume_path, model, optimizer, scheduler, args, epoch + 1,
+                            history, best_per, selected_checkpoint_per,
+                            best_selection_key, stale)
+        if args.baseline_failure_epochs > 0 and stale >= args.baseline_failure_epochs:
+            LOGGER.error("TOTAL FAILURE at epoch=%d: no improvement over the initialization "
+                         "baseline for %d epochs (best selection key %s)",
+                         epoch, stale, best_selection_key)
+            break
         if stale >= args.patience:
             LOGGER.info("early stopping after %d epochs", epoch)
             break
     for handler in LOGGER.handlers:
         handler.flush()
+
+
+def main() -> None:
+    with ExitStack() as resources:
+        _main(resources)
 
 
 if __name__ == "__main__":

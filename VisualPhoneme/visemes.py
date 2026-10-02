@@ -28,10 +28,15 @@ PHONE_TO_VISUAL_GROUP = {
     phone: group for group, members in VISUAL_PHONE_GROUPS.items() for phone in members
 }
 VISUAL_GROUPS = tuple(VISUAL_PHONE_GROUPS)
+REST_GROUP = "rest"
+VISUAL_GROUPS_WITH_REST = VISUAL_GROUPS + (REST_GROUP,)
 VISUAL_GROUP_TO_ID = {group: index + 1 for index, group in enumerate(VISUAL_GROUPS)}
+REST_GROUP_ID = len(VISUAL_GROUPS_WITH_REST)
+REST_PHONE_ID = len(PHONEMES) + 1
 PHONE_ID_TO_VISUAL_GROUP_ID = (0,) + tuple(
     VISUAL_GROUP_TO_ID[PHONE_TO_VISUAL_GROUP[phone]] for phone in PHONEMES
 )
+PHONE_ID_TO_VISUAL_GROUP_ID_WITH_REST = PHONE_ID_TO_VISUAL_GROUP_ID + (REST_GROUP_ID,)
 if set(PHONE_TO_VISUAL_GROUP) != set(PHONEMES):
     missing = sorted(set(PHONEMES) - set(PHONE_TO_VISUAL_GROUP))
     extra = sorted(set(PHONE_TO_VISUAL_GROUP) - set(PHONEMES))

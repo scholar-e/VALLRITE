@@ -21,8 +21,12 @@ class Lexicon:
         self.nodes = [{}]
         self.ends = [[]]
         self.words = {}
-        if tuple(document['phone_inventory']) != PHONES:
-            raise ValueError('lexicon inventory mismatch')
+        self.inventory = tuple(document['phone_inventory'])
+        if not self.inventory or len(set(self.inventory)) != len(self.inventory):
+            raise ValueError('empty or duplicate lexicon inventory')
+        self.vocabulary = ('<blank>',) + self.inventory
+        self.boundary_token = (self.vocabulary.index('rest')
+                               if 'rest' in self.vocabulary else None)
         for word in document['words']:
             wid = word['id']
             if wid in self.words or not word['text']:
@@ -39,7 +43,7 @@ class Lexicon:
                 seen.add(phones); ids.add(pron['id']); total += prior
                 node = 0
                 for phone in phones:
-                    token = VOCABULARY.index(phone)
+                    token = self.vocabulary.index(phone)
                     if token == 0:
                         raise ValueError('blank in pronunciation')
                     if token not in self.nodes[node]:
@@ -51,6 +55,8 @@ class Lexicon:
                 raise ValueError('pronunciation priors must sum to one')
 
     def advance(self, frontier, token):
+        if token == self.boundary_token:
+            return frozenset({0}) if 0 in frontier else frozenset()
         result = set()
         for node in frontier:
             child = self.nodes[node].get(token)
@@ -67,6 +73,11 @@ class Lexicon:
             current = dict(sorted(current.items(), key=lambda x: (-x[1], x[0]))[:beam])
             if offset == len(phones):
                 return current
+            if phones[offset] == self.boundary_token:
+                target = states.setdefault(offset + 1, {})
+                for words, score in current.items():
+                    target[words] = add(target.get(words, NEG), score)
+                continue
             node = 0
             for end in range(offset, len(phones)):
                 node = self.nodes[node].get(phones[end])
@@ -90,13 +101,19 @@ class StreamingDecoder:
     Search state is bounded by beam and utterance caps. This Python reference
     is not a mobile latency claim. Call reset() at utterance boundaries.
     """
-    def __init__(self, lexicon, beam_width=16, lexical_beam=32, max_steps=1000, max_phones=256, max_words=64):
+    def __init__(self, lexicon, beam_width=16, lexical_beam=32, max_steps=1000,
+                 max_phones=256, max_words=64, soft_rest_boundaries=False,
+                 rest_boundary_bonus=0.0):
         for value in (beam_width, lexical_beam, max_steps, max_phones, max_words):
             if not isinstance(value, int) or value < 1:
                 raise ValueError('limits must be positive integers')
         self.lexicon = lexicon
         self.beam_width, self.lexical_beam = beam_width, lexical_beam
         self.max_steps, self.max_phones, self.max_words = max_steps, max_phones, max_words
+        if not math.isfinite(rest_boundary_bonus):
+            raise ValueError('REST boundary bonus must be finite')
+        self.soft_rest_boundaries = soft_rest_boundaries
+        self.rest_boundary_bonus = rest_boundary_bonus
         self.reset()
 
     def reset(self):
@@ -107,8 +124,10 @@ class StreamingDecoder:
     def accept(self, rows):
         for row in rows:
             row = tuple(float(x) for x in row)
-            if len(row) != 40 or any(not math.isfinite(x) or x < 0 or x > 1 for x in row) or abs(sum(row)-1) > 1e-5:
-                raise ValueError('expected normalized finite 40-class probability row')
+            if (len(row) != len(self.lexicon.vocabulary)
+                    or any(not math.isfinite(x) or x < 0 or x > 1 for x in row)
+                    or abs(sum(row)-1) > 1e-5):
+                raise ValueError('expected normalized finite checkpoint-vocabulary probability row')
             if self.steps >= self.max_steps:
                 raise RuntimeError('utterance step budget exceeded; reset required')
             logs = [(i, math.log(p)) for i, p in enumerate(row) if p > 0]
@@ -124,6 +143,10 @@ class StreamingDecoder:
                     if token == 0:
                         accumulate(q, 0, total+emission, frontier)
                         continue
+                    if token == self.lexicon.boundary_token and self.soft_rest_boundaries:
+                        # Preserve a no-boundary interpretation so uncertain REST evidence
+                        # cannot prune an otherwise valid pronunciation path.
+                        accumulate(q, 0, total + emission, frontier)
                     repeated = bool(q) and token == q[-1]
                     if repeated and nonblank != NEG:
                         accumulate(q, 1, nonblank+emission, frontier)
@@ -134,7 +157,9 @@ class StreamingDecoder:
                     if child:
                         if len(q) >= self.max_phones:
                             raise RuntimeError('phone budget exceeded; reset required')
-                        accumulate(q+(token,), 1, source+emission, child)
+                        bonus = (self.rest_boundary_bonus
+                                 if token == self.lexicon.boundary_token else 0.0)
+                        accumulate(q+(token,), 1, source+emission+bonus, child)
             ranked = sorted(next_beam, key=lambda q: (-add(*next_beam[q]), q))[:self.beam_width]
             self.beam = {q: tuple(next_beam[q]) for q in ranked}
             self.frontiers = {q: frontiers[q] for q in ranked}
@@ -159,9 +184,12 @@ class StreamingDecoder:
 
 
 def probabilities_from_logits(logits, phones, valid_steps=None, batch_index=0):
-    """Adapt VisualPhoneme [T,B,40] torch logits; torch stays producer-side."""
-    if tuple(phones) != PHONES or logits.ndim != 3 or logits.shape[2] != 40:
-        raise ValueError('expected VisualPhoneme vocabulary and [T,B,40] logits')
+    """Adapt VisualPhoneme [T,B,C] logits; torch stays producer-side."""
+    from VisualPhoneme.visemes import VISUAL_GROUPS, VISUAL_GROUPS_WITH_REST
+    if (tuple(phones) not in {PHONES, VISUAL_GROUPS, VISUAL_GROUPS_WITH_REST}
+            or logits.ndim != 3
+            or logits.shape[2] != len(phones) + 1):
+        raise ValueError('expected checkpoint vocabulary and matching [T,B,C] logits')
     length = logits.shape[0] if valid_steps is None else valid_steps
     if not isinstance(length, int) or not 0 <= length <= logits.shape[0] or not 0 <= batch_index < logits.shape[1]:
         raise ValueError('invalid valid length or batch index')

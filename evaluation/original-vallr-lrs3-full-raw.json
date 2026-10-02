@@ -1,0 +1,3423 @@
+{
+  "created_utc": "2026-09-30T05:48:13.396540+00:00",
+  "scope": "LRS3 validation forced-aligned isolated word segments",
+  "checkpoint": "/home/elinzi/Coding/VALLRITE/checkpoints/original-vallr/model.pth",
+  "checkpoint_sha256": "bb6472606884d30a4a09be4a89e173501c2ca86c4da7ee2e2c1265f5b0d09233",
+  "words": 240,
+  "reference_phones": 822,
+  "substitutions": 503,
+  "deletions": 273,
+  "insertions": 108,
+  "per": 1.075425790754258,
+  "pronunciation_exact_words": 0,
+  "pronunciation_exact_word_accuracy": 0.0,
+  "pronunciation_exact_wer": 1.0,
+  "preprocessing": {
+    "frames": 16,
+    "size": 224,
+    "crop": "full",
+    "normalization": "raw",
+    "context_seconds_each_side": 0.0
+  },
+  "limitations": "Oracle word boundaries; pronunciation-exact WER is not sentence WER.",
+  "seconds": 5.8358071929978905,
+  "records": [
+    {
+      "word": "humans",
+      "reference": [
+        "HH",
+        "Y",
+        "UW",
+        "M",
+        "AH",
+        "N",
+        "Z"
+      ],
+      "hypothesis": [
+        "N",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "sense",
+      "reference": [
+        "S",
+        "EH",
+        "N",
+        "S"
+      ],
+      "hypothesis": [
+        "P",
+        "P",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "who's",
+      "reference": [
+        "HH",
+        "UW",
+        "Z"
+      ],
+      "hypothesis": [
+        "P",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "dishes",
+      "reference": [
+        "D",
+        "IH",
+        "SH",
+        "AH",
+        "Z"
+      ],
+      "hypothesis": [
+        "V",
+        "L",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "as",
+      "reference": [
+        "AE",
+        "Z"
+      ],
+      "hypothesis": [
+        "N",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "a",
+      "reference": [
+        "AH"
+      ],
+      "hypothesis": [
+        "P",
+        "T",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "he",
+      "reference": [
+        "HH",
+        "IY"
+      ],
+      "hypothesis": [
+        "N",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "S",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "N",
+        "R",
+        "T",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "think",
+      "reference": [
+        "TH",
+        "IH",
+        "NG",
+        "K"
+      ],
+      "hypothesis": [
+        "P",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "lot",
+      "reference": [
+        "L",
+        "AA",
+        "T"
+      ],
+      "hypothesis": [
+        "V",
+        "N",
+        "V",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "store",
+      "reference": [
+        "S",
+        "T",
+        "AO",
+        "R"
+      ],
+      "hypothesis": [
+        "P",
+        "R",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "as",
+      "reference": [
+        "AE",
+        "Z"
+      ],
+      "hypothesis": [],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "P",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "try",
+      "reference": [
+        "T",
+        "R",
+        "AY"
+      ],
+      "hypothesis": [
+        "P",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "go",
+      "reference": [
+        "G",
+        "OW"
+      ],
+      "hypothesis": [
+        "V",
+        "T",
+        "NG"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "so",
+      "reference": [
+        "S",
+        "OW"
+      ],
+      "hypothesis": [
+        "K",
+        "S",
+        "M"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "was",
+      "reference": [
+        "W",
+        "AA",
+        "Z"
+      ],
+      "hypothesis": [
+        "V"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "example",
+      "reference": [
+        "IH",
+        "G",
+        "Z",
+        "AE",
+        "M",
+        "P",
+        "AH",
+        "L"
+      ],
+      "hypothesis": [
+        "B",
+        "L",
+        "T",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "wasting",
+      "reference": [
+        "W",
+        "EY",
+        "S",
+        "T",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "S",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "monkey",
+      "reference": [
+        "M",
+        "AH",
+        "NG",
+        "K",
+        "IY"
+      ],
+      "hypothesis": [
+        "P",
+        "Z",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "M",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "out",
+      "reference": [
+        "AW",
+        "T"
+      ],
+      "hypothesis": [],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "why",
+      "reference": [
+        "W",
+        "AY"
+      ],
+      "hypothesis": [
+        "K",
+        "L",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "or",
+      "reference": [
+        "AO",
+        "R"
+      ],
+      "hypothesis": [
+        "G",
+        "SH",
+        "NG"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "this",
+      "reference": [
+        "DH",
+        "IH",
+        "S"
+      ],
+      "hypothesis": [
+        "K",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "TH",
+        "R",
+        "JH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "a",
+      "reference": [
+        "AH"
+      ],
+      "hypothesis": [
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "domain",
+      "reference": [
+        "D",
+        "OW",
+        "M",
+        "EY",
+        "N"
+      ],
+      "hypothesis": [
+        "P",
+        "SH",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "curiosity",
+      "reference": [
+        "K",
+        "Y",
+        "UH",
+        "R",
+        "IY",
+        "AA",
+        "S",
+        "AH",
+        "T",
+        "IY"
+      ],
+      "hypothesis": [
+        "B",
+        "JH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "heart",
+      "reference": [
+        "HH",
+        "AA",
+        "R",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "K",
+        "L",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "was",
+      "reference": [
+        "W",
+        "AA",
+        "Z"
+      ],
+      "hypothesis": [
+        "N",
+        "K",
+        "S",
+        "Z",
+        "T",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "that",
+      "reference": [
+        "DH",
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "V"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "don't",
+      "reference": [
+        "D",
+        "OW",
+        "N",
+        "T"
+      ],
+      "hypothesis": [
+        "P",
+        "S",
+        "SH",
+        "T",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "you",
+      "reference": [
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "S",
+        "CH",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "have",
+      "reference": [
+        "HH",
+        "AE",
+        "V"
+      ],
+      "hypothesis": [
+        "V",
+        "R",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "eye",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "F",
+        "JH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "my",
+      "reference": [
+        "M",
+        "AY"
+      ],
+      "hypothesis": [
+        "HH",
+        "TH",
+        "NG"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "us",
+      "reference": [
+        "AH",
+        "S"
+      ],
+      "hypothesis": [
+        "K",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "F",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "have",
+      "reference": [
+        "HH",
+        "AE",
+        "V"
+      ],
+      "hypothesis": [
+        "V",
+        "L",
+        "T",
+        "N",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "how",
+      "reference": [
+        "HH",
+        "AW"
+      ],
+      "hypothesis": [
+        "CH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "norway",
+      "reference": [
+        "N",
+        "AO",
+        "R",
+        "W",
+        "EY"
+      ],
+      "hypothesis": [
+        "S",
+        "TH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "G",
+        "N",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "go",
+      "reference": [
+        "G",
+        "OW"
+      ],
+      "hypothesis": [
+        "D",
+        "S",
+        "N",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "how",
+      "reference": [
+        "HH",
+        "AW"
+      ],
+      "hypothesis": [
+        "R",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it",
+      "reference": [
+        "IH",
+        "T"
+      ],
+      "hypothesis": [
+        "HH",
+        "T",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "enterprise",
+      "reference": [
+        "EH",
+        "N",
+        "T",
+        "ER",
+        "P",
+        "R",
+        "AY",
+        "Z"
+      ],
+      "hypothesis": [
+        "P",
+        "P",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "just",
+      "reference": [
+        "JH",
+        "AH",
+        "S",
+        "T"
+      ],
+      "hypothesis": [
+        "M",
+        "S",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "picture",
+      "reference": [
+        "P",
+        "IH",
+        "K",
+        "CH",
+        "ER"
+      ],
+      "hypothesis": [
+        "K",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "learning",
+      "reference": [
+        "L",
+        "ER",
+        "N",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "away",
+      "reference": [
+        "AH",
+        "W",
+        "EY"
+      ],
+      "hypothesis": [
+        "N",
+        "D",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it's",
+      "reference": [
+        "IH",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "P",
+        "S",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "and",
+      "reference": [
+        "AH",
+        "N",
+        "D"
+      ],
+      "hypothesis": [
+        "N",
+        "M"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "numbers",
+      "reference": [
+        "N",
+        "AH",
+        "M",
+        "B",
+        "ER",
+        "Z"
+      ],
+      "hypothesis": [
+        "N",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "off",
+      "reference": [
+        "AO",
+        "F"
+      ],
+      "hypothesis": [
+        "F",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "an",
+      "reference": [
+        "AE",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "willing",
+      "reference": [
+        "W",
+        "IH",
+        "L",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "T",
+        "N",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "experience",
+      "reference": [
+        "IH",
+        "K",
+        "S",
+        "P",
+        "IH",
+        "R",
+        "IY",
+        "AH",
+        "N",
+        "S"
+      ],
+      "hypothesis": [
+        "P",
+        "P",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "our",
+      "reference": [
+        "AW",
+        "ER"
+      ],
+      "hypothesis": [
+        "L",
+        "R",
+        "T",
+        "L",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "a",
+      "reference": [
+        "AH"
+      ],
+      "hypothesis": [
+        "S",
+        "S",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "P",
+        "S",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "P",
+        "V",
+        "Z",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "M",
+        "S",
+        "SH",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "are",
+      "reference": [
+        "AA",
+        "R"
+      ],
+      "hypothesis": [
+        "P",
+        "L",
+        "Z",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "V",
+        "V",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "from",
+      "reference": [
+        "F",
+        "R",
+        "AH",
+        "M"
+      ],
+      "hypothesis": [
+        "G",
+        "V",
+        "N",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "areas",
+      "reference": [
+        "EH",
+        "R",
+        "IY",
+        "AH",
+        "Z"
+      ],
+      "hypothesis": [
+        "HH",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "see",
+      "reference": [
+        "S",
+        "IY"
+      ],
+      "hypothesis": [
+        "W",
+        "L",
+        "W"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "as",
+      "reference": [
+        "AE",
+        "Z"
+      ],
+      "hypothesis": [
+        "L",
+        "Z",
+        "D",
+        "Z",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "keynote",
+      "reference": [
+        "K",
+        "IY",
+        "N",
+        "OW",
+        "T"
+      ],
+      "hypothesis": [
+        "P",
+        "D",
+        "W",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "Y",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "was",
+      "reference": [
+        "W",
+        "AA",
+        "Z"
+      ],
+      "hypothesis": [
+        "B",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "ask",
+      "reference": [
+        "AE",
+        "S",
+        "K"
+      ],
+      "hypothesis": [
+        "P",
+        "V"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "most",
+      "reference": [
+        "M",
+        "OW",
+        "S",
+        "T"
+      ],
+      "hypothesis": [
+        "N",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "for",
+      "reference": [
+        "F",
+        "AO",
+        "R"
+      ],
+      "hypothesis": [
+        "P",
+        "R",
+        "M",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "by",
+      "reference": [
+        "B",
+        "AY"
+      ],
+      "hypothesis": [
+        "W",
+        "JH",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "M",
+        "M"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it",
+      "reference": [
+        "IH",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "S",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "P",
+        "S",
+        "NG"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "my",
+      "reference": [
+        "M",
+        "AY"
+      ],
+      "hypothesis": [
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "will",
+      "reference": [
+        "W",
+        "IH",
+        "L"
+      ],
+      "hypothesis": [
+        "F",
+        "K"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "again",
+      "reference": [
+        "AH",
+        "G",
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "M",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "because",
+      "reference": [
+        "B",
+        "IH",
+        "K",
+        "AO",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "be",
+      "reference": [
+        "B",
+        "IY"
+      ],
+      "hypothesis": [
+        "N",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "you",
+      "reference": [
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "D",
+        "SH",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "K",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "you",
+      "reference": [
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "T",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "yourself",
+      "reference": [
+        "Y",
+        "ER",
+        "S",
+        "EH",
+        "L",
+        "F"
+      ],
+      "hypothesis": [
+        "L",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "had",
+      "reference": [
+        "HH",
+        "AE",
+        "D"
+      ],
+      "hypothesis": [
+        "M",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it",
+      "reference": [
+        "IH",
+        "T"
+      ],
+      "hypothesis": [
+        "M"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "then",
+      "reference": [
+        "DH",
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "W",
+        "M",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "where",
+      "reference": [
+        "W",
+        "EH",
+        "R"
+      ],
+      "hypothesis": [
+        "S",
+        "S",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "for",
+      "reference": [
+        "F",
+        "AO",
+        "R"
+      ],
+      "hypothesis": [
+        "S",
+        "T",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "see",
+      "reference": [
+        "S",
+        "IY"
+      ],
+      "hypothesis": [
+        "F",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it's",
+      "reference": [
+        "IH",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "L",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "doing",
+      "reference": [
+        "D",
+        "UW",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "N",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "suggests",
+      "reference": [
+        "S",
+        "AH",
+        "JH",
+        "EH",
+        "S",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "HH",
+        "TH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "my",
+      "reference": [
+        "M",
+        "AY"
+      ],
+      "hypothesis": [
+        "N",
+        "V",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "S",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "is",
+      "reference": [
+        "IH",
+        "Z"
+      ],
+      "hypothesis": [
+        "Y"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "really",
+      "reference": [
+        "R",
+        "IH",
+        "L",
+        "IY"
+      ],
+      "hypothesis": [
+        "L",
+        "JH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "communities",
+      "reference": [
+        "K",
+        "AH",
+        "M",
+        "Y",
+        "UW",
+        "N",
+        "AH",
+        "T",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "L",
+        "P"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it",
+      "reference": [
+        "IH",
+        "T"
+      ],
+      "hypothesis": [
+        "R",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "S",
+        "SH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "example",
+      "reference": [
+        "IH",
+        "G",
+        "Z",
+        "AE",
+        "M",
+        "P",
+        "AH",
+        "L"
+      ],
+      "hypothesis": [
+        "P",
+        "R",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "this",
+      "reference": [
+        "DH",
+        "IH",
+        "S"
+      ],
+      "hypothesis": [
+        "G",
+        "R",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "yourself",
+      "reference": [
+        "Y",
+        "ER",
+        "S",
+        "EH",
+        "L",
+        "F"
+      ],
+      "hypothesis": [
+        "W",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "persecution",
+      "reference": [
+        "P",
+        "ER",
+        "S",
+        "AH",
+        "K",
+        "Y",
+        "UW",
+        "SH",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "chapter",
+      "reference": [
+        "CH",
+        "AE",
+        "P",
+        "T",
+        "ER"
+      ],
+      "hypothesis": [
+        "K",
+        "L",
+        "N",
+        "L",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "is",
+      "reference": [
+        "IH",
+        "Z"
+      ],
+      "hypothesis": [
+        "N",
+        "S",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "north",
+      "reference": [
+        "N",
+        "AO",
+        "R",
+        "TH"
+      ],
+      "hypothesis": [
+        "B",
+        "R",
+        "JH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "we",
+      "reference": [
+        "W",
+        "IY"
+      ],
+      "hypothesis": [
+        "HH",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "potato",
+      "reference": [
+        "P",
+        "AH",
+        "T",
+        "EY",
+        "T",
+        "OW"
+      ],
+      "hypothesis": [
+        "P",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "was",
+      "reference": [
+        "W",
+        "AA",
+        "Z"
+      ],
+      "hypothesis": [
+        "V"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "almost",
+      "reference": [
+        "AO",
+        "L",
+        "M",
+        "OW",
+        "S",
+        "T"
+      ],
+      "hypothesis": [
+        "P",
+        "P",
+        "T",
+        "R",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "realize",
+      "reference": [
+        "R",
+        "IY",
+        "AH",
+        "L",
+        "AY",
+        "Z"
+      ],
+      "hypothesis": [
+        "P",
+        "N",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "ton",
+      "reference": [
+        "T",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "P",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "L",
+        "K",
+        "V"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "doing",
+      "reference": [
+        "D",
+        "UW",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "S",
+        "CH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "CH",
+        "S",
+        "Z",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "some",
+      "reference": [
+        "S",
+        "AH",
+        "M"
+      ],
+      "hypothesis": [
+        "HH",
+        "F",
+        "N",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "old",
+      "reference": [
+        "OW",
+        "L",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "CH",
+        "S",
+        "SH",
+        "SH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "one",
+      "reference": [
+        "W",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "T",
+        "Z",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "on",
+      "reference": [
+        "AA",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "D",
+        "NG"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "here",
+      "reference": [
+        "HH",
+        "IY",
+        "R"
+      ],
+      "hypothesis": [
+        "K",
+        "L",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "measure",
+      "reference": [
+        "M",
+        "EH",
+        "ZH",
+        "ER"
+      ],
+      "hypothesis": [
+        "M",
+        "V",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "care",
+      "reference": [
+        "K",
+        "EH",
+        "R"
+      ],
+      "hypothesis": [
+        "N",
+        "Z",
+        "CH",
+        "N",
+        "D",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "programmed",
+      "reference": [
+        "P",
+        "R",
+        "OW",
+        "G",
+        "R",
+        "AE",
+        "M",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "N",
+        "V",
+        "D",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "consensus",
+      "reference": [
+        "K",
+        "AH",
+        "N",
+        "S",
+        "EH",
+        "N",
+        "S",
+        "AH",
+        "S"
+      ],
+      "hypothesis": [
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "way",
+      "reference": [
+        "W",
+        "EY"
+      ],
+      "hypothesis": [
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "Y",
+        "K"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "cleve",
+      "reference": [
+        "K",
+        "L",
+        "IY",
+        "V"
+      ],
+      "hypothesis": [
+        "P",
+        "L",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "who",
+      "reference": [
+        "HH",
+        "UW"
+      ],
+      "hypothesis": [
+        "V",
+        "SH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it's",
+      "reference": [
+        "IH",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "P",
+        "R",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "that",
+      "reference": [
+        "DH",
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "S",
+        "CH",
+        "NG"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "age",
+      "reference": [
+        "EY",
+        "JH"
+      ],
+      "hypothesis": [
+        "CH",
+        "Z",
+        "D",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "map",
+      "reference": [
+        "M",
+        "AE",
+        "P"
+      ],
+      "hypothesis": [
+        "M",
+        "SH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "you",
+      "reference": [
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "D",
+        "F",
+        "L",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "a",
+      "reference": [
+        "AH"
+      ],
+      "hypothesis": [
+        "L",
+        "Z",
+        "N",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "W",
+        "CH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "you",
+      "reference": [
+        "Y",
+        "UW"
+      ],
+      "hypothesis": [
+        "N",
+        "R",
+        "T",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "tupperware",
+      "reference": [
+        "T",
+        "AH",
+        "P",
+        "ER",
+        "W",
+        "EH",
+        "R"
+      ],
+      "hypothesis": [
+        "F",
+        "M",
+        "R",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "head",
+      "reference": [
+        "HH",
+        "EH",
+        "D"
+      ],
+      "hypothesis": [
+        "HH",
+        "Z",
+        "TH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "that",
+      "reference": [
+        "DH",
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "N",
+        "CH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "is",
+      "reference": [
+        "IH",
+        "Z"
+      ],
+      "hypothesis": [
+        "S",
+        "V",
+        "S",
+        "L",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "a",
+      "reference": [
+        "AH"
+      ],
+      "hypothesis": [
+        "S",
+        "K",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "study",
+      "reference": [
+        "S",
+        "T",
+        "AH",
+        "D",
+        "IY"
+      ],
+      "hypothesis": [
+        "P",
+        "R",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "had",
+      "reference": [
+        "HH",
+        "AE",
+        "D"
+      ],
+      "hypothesis": [
+        "P",
+        "D",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "monkey",
+      "reference": [
+        "M",
+        "AH",
+        "NG",
+        "K",
+        "IY"
+      ],
+      "hypothesis": [
+        "P",
+        "Z",
+        "CH",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "thinking",
+      "reference": [
+        "TH",
+        "IH",
+        "NG",
+        "K",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "eisenhower",
+      "reference": [
+        "AY",
+        "Z",
+        "AH",
+        "N",
+        "HH",
+        "AW",
+        "ER"
+      ],
+      "hypothesis": [
+        "V",
+        "S",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "had",
+      "reference": [
+        "HH",
+        "AE",
+        "D"
+      ],
+      "hypothesis": [
+        "D",
+        "S",
+        "D",
+        "V",
+        "L",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "chimpanzees",
+      "reference": [
+        "CH",
+        "IH",
+        "M",
+        "P",
+        "AE",
+        "N",
+        "Z",
+        "IY",
+        "Z"
+      ],
+      "hypothesis": [
+        "W",
+        "P",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "prep",
+      "reference": [
+        "P",
+        "R",
+        "EH",
+        "P"
+      ],
+      "hypothesis": [
+        "JH",
+        "Z",
+        "D",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "our",
+      "reference": [
+        "AW",
+        "ER"
+      ],
+      "hypothesis": [
+        "CH",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "am",
+      "reference": [
+        "AE",
+        "M"
+      ],
+      "hypothesis": [
+        "K",
+        "R",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "however",
+      "reference": [
+        "HH",
+        "AW",
+        "EH",
+        "V",
+        "ER"
+      ],
+      "hypothesis": [
+        "W",
+        "JH",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "first",
+      "reference": [
+        "F",
+        "ER",
+        "S",
+        "T"
+      ],
+      "hypothesis": [
+        "R",
+        "N",
+        "Y"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "what",
+      "reference": [
+        "W",
+        "AH",
+        "T"
+      ],
+      "hypothesis": [
+        "P",
+        "SH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "for",
+      "reference": [
+        "F",
+        "AO",
+        "R"
+      ],
+      "hypothesis": [
+        "L",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "one",
+      "reference": [
+        "W",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "P",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "number",
+      "reference": [
+        "N",
+        "AH",
+        "M",
+        "B",
+        "ER"
+      ],
+      "hypothesis": [
+        "K",
+        "G",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "an",
+      "reference": [
+        "AE",
+        "N"
+      ],
+      "hypothesis": [
+        "P",
+        "R",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "us",
+      "reference": [
+        "AH",
+        "S"
+      ],
+      "hypothesis": [
+        "K",
+        "N",
+        "K"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "S",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "through",
+      "reference": [
+        "TH",
+        "R",
+        "UW"
+      ],
+      "hypothesis": [
+        "V",
+        "R",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "but",
+      "reference": [
+        "B",
+        "AH",
+        "T"
+      ],
+      "hypothesis": [
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "sexual",
+      "reference": [
+        "S",
+        "EH",
+        "K",
+        "SH",
+        "UW",
+        "AH",
+        "L"
+      ],
+      "hypothesis": [
+        "S",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "S",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "problem",
+      "reference": [
+        "P",
+        "R",
+        "AA",
+        "B",
+        "L",
+        "AH",
+        "M"
+      ],
+      "hypothesis": [
+        "V",
+        "S",
+        "V",
+        "R",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "have",
+      "reference": [
+        "HH",
+        "AE",
+        "V"
+      ],
+      "hypothesis": [
+        "S",
+        "N",
+        "JH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "fighting",
+      "reference": [
+        "F",
+        "AY",
+        "T",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "L",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i'd",
+      "reference": [
+        "AY",
+        "D"
+      ],
+      "hypothesis": [
+        "P",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "parts",
+      "reference": [
+        "P",
+        "AA",
+        "R",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "JH",
+        "Z",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "K",
+        "R"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "HH",
+        "P",
+        "L",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "are",
+      "reference": [
+        "AA",
+        "R"
+      ],
+      "hypothesis": [
+        "P",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "being",
+      "reference": [
+        "B",
+        "IY",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "L",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "all",
+      "reference": [
+        "AO",
+        "L"
+      ],
+      "hypothesis": [
+        "M",
+        "CH",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "with",
+      "reference": [
+        "W",
+        "IH",
+        "DH"
+      ],
+      "hypothesis": [
+        "N",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "are",
+      "reference": [
+        "AA",
+        "R"
+      ],
+      "hypothesis": [
+        "S",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "and",
+      "reference": [
+        "AH",
+        "N",
+        "D"
+      ],
+      "hypothesis": [
+        "K",
+        "Y",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "that's",
+      "reference": [
+        "DH",
+        "AE",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "S",
+        "N",
+        "Z",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "don't",
+      "reference": [
+        "D",
+        "OW",
+        "N",
+        "T"
+      ],
+      "hypothesis": [
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "P",
+        "N",
+        "V"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "not",
+      "reference": [
+        "N",
+        "AA",
+        "T"
+      ],
+      "hypothesis": [
+        "L",
+        "T",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "now",
+      "reference": [
+        "N",
+        "AW"
+      ],
+      "hypothesis": [
+        "F",
+        "L",
+        "V"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "i",
+      "reference": [
+        "AY"
+      ],
+      "hypothesis": [
+        "V",
+        "R",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "go",
+      "reference": [
+        "G",
+        "OW"
+      ],
+      "hypothesis": [
+        "V",
+        "DH",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "get",
+      "reference": [
+        "G",
+        "EH",
+        "T"
+      ],
+      "hypothesis": [
+        "N",
+        "S",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "then",
+      "reference": [
+        "DH",
+        "EH",
+        "N"
+      ],
+      "hypothesis": [
+        "M",
+        "N",
+        "CH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "as",
+      "reference": [
+        "AE",
+        "Z"
+      ],
+      "hypothesis": [
+        "JH",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "TH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "did",
+      "reference": [
+        "D",
+        "IH",
+        "D"
+      ],
+      "hypothesis": [
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "tool",
+      "reference": [
+        "T",
+        "UW",
+        "L"
+      ],
+      "hypothesis": [
+        "S",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "of",
+      "reference": [
+        "AH",
+        "V"
+      ],
+      "hypothesis": [
+        "W",
+        "R",
+        "K",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "magazines",
+      "reference": [
+        "M",
+        "AE",
+        "G",
+        "AH",
+        "Z",
+        "IY",
+        "N",
+        "Z"
+      ],
+      "hypothesis": [
+        "K",
+        "F",
+        "V",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "democratic",
+      "reference": [
+        "D",
+        "EH",
+        "M",
+        "AH",
+        "K",
+        "R",
+        "AE",
+        "T",
+        "IH",
+        "K"
+      ],
+      "hypothesis": [
+        "S",
+        "Z",
+        "V",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "its",
+      "reference": [
+        "IH",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "N",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "P",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "standard",
+      "reference": [
+        "S",
+        "T",
+        "AE",
+        "N",
+        "D",
+        "ER",
+        "D"
+      ],
+      "hypothesis": [
+        "S",
+        "K",
+        "SH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it's",
+      "reference": [
+        "IH",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "M",
+        "N",
+        "K"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "Y",
+        "SH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "embarrassed",
+      "reference": [
+        "IH",
+        "M",
+        "B",
+        "EH",
+        "R",
+        "AH",
+        "S",
+        "T"
+      ],
+      "hypothesis": [
+        "V",
+        "N",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "we",
+      "reference": [
+        "W",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "that",
+      "reference": [
+        "DH",
+        "AE",
+        "T"
+      ],
+      "hypothesis": [
+        "N",
+        "V"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "today",
+      "reference": [
+        "T",
+        "AH",
+        "D",
+        "EY"
+      ],
+      "hypothesis": [
+        "N",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "are",
+      "reference": [
+        "AA",
+        "R"
+      ],
+      "hypothesis": [
+        "K",
+        "S",
+        "JH"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it's",
+      "reference": [
+        "IH",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "P",
+        "Z",
+        "Z",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "legal",
+      "reference": [
+        "L",
+        "IY",
+        "G",
+        "AH",
+        "L"
+      ],
+      "hypothesis": [
+        "D",
+        "F",
+        "R",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "T",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "disrupt",
+      "reference": [
+        "D",
+        "IH",
+        "S",
+        "R",
+        "AH",
+        "P",
+        "T"
+      ],
+      "hypothesis": [
+        "K",
+        "B",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "is",
+      "reference": [
+        "IH",
+        "Z"
+      ],
+      "hypothesis": [
+        "M",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "that's",
+      "reference": [
+        "DH",
+        "AE",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "V",
+        "N",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "human",
+      "reference": [
+        "HH",
+        "Y",
+        "UW",
+        "M",
+        "AH",
+        "N"
+      ],
+      "hypothesis": [
+        "S",
+        "Z",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "was",
+      "reference": [
+        "W",
+        "AA",
+        "Z"
+      ],
+      "hypothesis": [
+        "K"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "writing",
+      "reference": [
+        "R",
+        "AY",
+        "T",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "S",
+        "Z",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "much",
+      "reference": [
+        "M",
+        "AH",
+        "CH"
+      ],
+      "hypothesis": [
+        "P",
+        "Z",
+        "W",
+        "L"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "intracellular",
+      "reference": [
+        "IH",
+        "N",
+        "T",
+        "R",
+        "AA",
+        "S",
+        "EH",
+        "L",
+        "Y",
+        "AH",
+        "L",
+        "ER"
+      ],
+      "hypothesis": [
+        "P",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "an",
+      "reference": [
+        "AE",
+        "N"
+      ],
+      "hypothesis": [
+        "HH",
+        "T"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "it's",
+      "reference": [
+        "IH",
+        "T",
+        "S"
+      ],
+      "hypothesis": [
+        "T",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "in",
+      "reference": [
+        "IH",
+        "N"
+      ],
+      "hypothesis": [
+        "K",
+        "N",
+        "V",
+        "NG"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "talk",
+      "reference": [
+        "T",
+        "AO",
+        "K"
+      ],
+      "hypothesis": [
+        "SH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "her",
+      "reference": [
+        "HH",
+        "ER"
+      ],
+      "hypothesis": [
+        "P",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "response",
+      "reference": [
+        "R",
+        "IH",
+        "S",
+        "P",
+        "AA",
+        "N",
+        "S"
+      ],
+      "hypothesis": [
+        "P",
+        "SH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "about",
+      "reference": [
+        "AH",
+        "B",
+        "AW",
+        "T"
+      ],
+      "hypothesis": [
+        "D",
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "to",
+      "reference": [
+        "T",
+        "UW"
+      ],
+      "hypothesis": [
+        "K",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "asking",
+      "reference": [
+        "AE",
+        "S",
+        "K",
+        "IH",
+        "NG"
+      ],
+      "hypothesis": [
+        "W",
+        "CH",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "me",
+      "reference": [
+        "M",
+        "IY"
+      ],
+      "hypothesis": [
+        "S",
+        "D",
+        "Z"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "wishes",
+      "reference": [
+        "W",
+        "IH",
+        "SH",
+        "IH",
+        "Z"
+      ],
+      "hypothesis": [
+        "R",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "find",
+      "reference": [
+        "F",
+        "AY",
+        "N",
+        "D"
+      ],
+      "hypothesis": [
+        "S"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "ago",
+      "reference": [
+        "AH",
+        "G",
+        "OW"
+      ],
+      "hypothesis": [
+        "L",
+        "K",
+        "R",
+        "D"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "for",
+      "reference": [
+        "F",
+        "AO",
+        "R"
+      ],
+      "hypothesis": [
+        "S",
+        "SH",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "more",
+      "reference": [
+        "M",
+        "AO",
+        "R"
+      ],
+      "hypothesis": [
+        "TH",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "the",
+      "reference": [
+        "DH",
+        "AH"
+      ],
+      "hypothesis": [
+        "P",
+        "S",
+        "R",
+        "N"
+      ],
+      "pronunciation_exact": false
+    },
+    {
+      "word": "and",
+      "reference": [
+        "AH",
+        "N",
+        "D"
+      ],
+      "hypothesis": [
+        "CH",
+        "R",
+        "SH",
+        "N"
+      ],
+      "pronunciation_exact": false
+    }
+  ]
+}

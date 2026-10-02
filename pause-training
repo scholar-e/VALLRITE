@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -u
+
+paused=0
+
+request_pause() {
+  local output_dir="$1"
+  if [[ -z "$output_dir" ]]; then
+    return
+  fi
+  mkdir -p "$output_dir"
+  touch "$output_dir/PAUSE"
+  echo "Pause requested: $output_dir/PAUSE"
+  paused=$((paused + 1))
+}
+
+# Explicit directories are useful if the trainer is temporarily absent or its
+# command line cannot be inspected.
+if (( $# > 0 )); then
+  for output_dir in "$@"; do
+    request_pause "$output_dir"
+  done
+fi
+
+# Discover every local VisualPhoneme trainer. The marker is persistent and the
+# signal wakes the main process promptly; train.py handles SIGINT by saving at
+# the next batch boundary instead of raising KeyboardInterrupt.
+mapfile -t trainer_pids < <(pgrep -f 'python.*-m VisualPhoneme\.train' || true)
+declare -A trainer_set=()
+for pid in "${trainer_pids[@]}"; do
+  trainer_set["$pid"]=1
+done
+
+for pid in "${trainer_pids[@]}"; do
+  [[ -r "/proc/$pid/cmdline" ]] || continue
+  parent_pid=$(awk '/^PPid:/ {print $2}' "/proc/$pid/status")
+  # DataLoader workers inherit the trainer command line and signal handler.
+  # Signal only the top-level process; its persistent marker is visible to all.
+  if [[ -n "${trainer_set[$parent_pid]:-}" ]]; then
+    continue
+  fi
+  mapfile -d '' -t arguments < "/proc/$pid/cmdline"
+  output_dir=""
+  for ((index = 0; index + 1 < ${#arguments[@]}; index++)); do
+    if [[ "${arguments[index]}" == "--output-dir" ]]; then
+      output_dir="${arguments[index + 1]}"
+      break
+    fi
+  done
+  if [[ -n "$output_dir" && ! -f "$output_dir/PAUSE" ]]; then
+    request_pause "$output_dir"
+  elif [[ -n "$output_dir" ]]; then
+    echo "Pause already requested: $output_dir/PAUSE"
+    paused=$((paused + 1))
+  fi
+  kill -INT "$pid" 2>/dev/null || true
+  echo "Signaled trainer PID $pid; it will save after its current batch."
+done
+
+if (( paused == 0 )); then
+  echo "No active VisualPhoneme training task was found." >&2
+  echo "To prepare a marker anyway: ./pause-training OUTPUT_DIR" >&2
+  exit 1
+fi

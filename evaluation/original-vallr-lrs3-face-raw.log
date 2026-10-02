@@ -1,0 +1,13 @@
+2026-09-29 22:48:39,917 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=20/240
+2026-09-29 22:48:40,357 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=40/240
+2026-09-29 22:48:40,780 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=60/240
+2026-09-29 22:48:41,208 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=80/240
+2026-09-29 22:48:41,633 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=100/240
+2026-09-29 22:48:42,060 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=120/240
+2026-09-29 22:48:42,482 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=140/240
+2026-09-29 22:48:42,914 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=160/240
+2026-09-29 22:48:43,341 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=180/240
+2026-09-29 22:48:43,764 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=200/240
+2026-09-29 22:48:44,197 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=220/240
+2026-09-29 22:48:44,626 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:118 - evaluated words=240/240
+2026-09-29 22:48:45,075 - original_vallr_lrs3 - INFO - evaluate_original_vallr_lrs3.py:137 - PER=106.20% pronunciation-exact WER=100.00% words=240 seconds=5.9

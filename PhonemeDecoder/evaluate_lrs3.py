@@ -15,10 +15,13 @@ import torch
 from torch.utils.data import DataLoader
 
 from PhonemeDecoder.decoder import Lexicon, PHONES, StreamingDecoder, probabilities_from_logits
-from PhonemeDecoder.evaluate_grid import edit_distance, load_model
+from PhonemeDecoder.evaluate_grid import edit_distance
 from VisualPhoneme.data import (collate_clips, collate_fusion_clips,
                                 collate_landmark_clips, greedy_decode)
 from VisualPhoneme.lrs3_data import Lrs3Clips
+from VisualPhoneme.evaluate_nbest import load_model
+from VisualPhoneme.visemes import (PHONE_TO_VISUAL_GROUP, VISUAL_GROUPS,
+                                   VISUAL_GROUPS_WITH_REST)
 
 LOGGER = logging.getLogger("phoneme_decoder.evaluate_lrs3")
 
@@ -37,7 +40,7 @@ def configure_logging(path: Path) -> None:
         LOGGER.addHandler(handler)
 
 
-def build_cmudict_lexicon() -> dict:
+def build_cmudict_lexicon(inventory: tuple[str, ...] = PHONES) -> dict:
     """Create the decoder contract from the installed, versioned CMUdict data."""
     try:
         import pronouncing
@@ -51,6 +54,8 @@ def build_cmudict_lexicon() -> dict:
         phones = tuple(re.sub(r"\d", "", phone).upper() for phone in raw_phones
                        if re.sub(r"\d", "", phone).upper() in PHONES)
         if phones and len(phones) == len(raw_phones):
+            if inventory in {VISUAL_GROUPS, VISUAL_GROUPS_WITH_REST}:
+                phones = tuple(PHONE_TO_VISUAL_GROUP[phone] for phone in phones)
             pronunciations.setdefault(normalized_word, set()).add(phones)
     words = []
     for word, variants_set in sorted(pronunciations.items()):
@@ -64,7 +69,7 @@ def build_cmudict_lexicon() -> dict:
                 for index, phones in enumerate(variants, 1)
             ],
         })
-    document = {"phone_inventory": list(PHONES), "words": words}
+    document = {"phone_inventory": list(inventory), "words": words}
     Lexicon(document)
     return document
 
@@ -84,6 +89,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--beam-width", type=int, default=16)
     parser.add_argument("--lexical-beam", type=int, default=32)
     parser.add_argument("--nbest", type=int, default=5)
+    parser.add_argument("--soft-rest-boundaries", action="store_true",
+                        help="allow REST emissions to be ignored instead of forcing a word split")
+    parser.add_argument("--rest-boundary-bonus", type=float, default=0.0)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     parser.add_argument("--frame-cache-dir", type=Path,
                         default=Path("datasets/lrs3/frame-cache"))
@@ -100,25 +108,35 @@ def main() -> None:
     configure_logging(args.output_dir / "generate.log")
     device_name = "cuda" if args.device == "auto" and torch.cuda.is_available() else args.device
     device = torch.device("cpu" if device_name == "auto" else device_name)
-    checkpoint, architecture, model = load_model(args.checkpoint, device)
-    include_video = architecture in {"image", "fusion", "gated-fusion",
-                                     "tongue-gated-fusion"}
+    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
+    architecture, model = load_model(checkpoint, device)
+    inventory = tuple(checkpoint["phones"])
+    if inventory not in {PHONES, VISUAL_GROUPS, VISUAL_GROUPS_WITH_REST}:
+        raise ValueError("checkpoint has an unsupported decoder inventory")
+    include_video = architecture in {"image", "large-image", "fusion", "gated-fusion",
+                                     "tongue-gated-fusion", "large-gated-fusion",
+                                     "large-transformer-fusion", "autoavsr-fusion"}
     include_landmarks = architecture in {"coordinates", "fusion", "gated-fusion",
-                                         "tongue-gated-fusion"}
+                                         "tongue-gated-fusion", "large-gated-fusion",
+                                         "large-transformer-fusion", "autoavsr-fusion"}
     dataset = Lrs3Clips(
         args.data_root, "validation", int(checkpoint["image_size"]), checkpoint["crop"],
         args.limit, False, include_landmarks, include_video, False,
         checkpoint.get("coordinate_mode", "eye-normalized"), args.frame_cache_dir,
         checkpoint.get("coordinate_features", "position"),
     )
-    collators = {"image": collate_clips, "coordinates": collate_landmark_clips,
+    collators = {"image": collate_clips, "large-image": collate_clips,
+                 "coordinates": collate_landmark_clips,
                  "fusion": collate_fusion_clips, "gated-fusion": collate_fusion_clips,
-                 "tongue-gated-fusion": collate_fusion_clips}
+                 "tongue-gated-fusion": collate_fusion_clips,
+                 "large-gated-fusion": collate_fusion_clips,
+                 "large-transformer-fusion": collate_fusion_clips,
+                 "autoavsr-fusion": collate_fusion_clips}
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False,
                         num_workers=args.workers, collate_fn=collators[architecture],
                         pin_memory=device.type == "cuda",
                         persistent_workers=args.workers > 0)
-    lexicon_document = build_cmudict_lexicon()
+    lexicon_document = build_cmudict_lexicon(inventory)
     lexicon = Lexicon(lexicon_document)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "lexicon.json").write_text(
@@ -133,7 +151,9 @@ def main() -> None:
                 device, architecture, len(dataset), args.beam_width, args.nbest, factor)
     with output_path.open("w", buffering=1) as output, torch.inference_mode():
         for batch_number, batch in enumerate(loader, 1):
-            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion"}:
+            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
+                                "large-gated-fusion", "large-transformer-fusion",
+                                "autoavsr-fusion"}:
                 video, landmarks, mask, _, lengths, _, clip_ids = batch
                 logits = model(video.to(device, non_blocking=True),
                                landmarks.to(device, non_blocking=True),
@@ -151,7 +171,9 @@ def main() -> None:
             greedy = greedy_decode(logits, lengths)
             for index, (clip_id, length) in enumerate(zip(clip_ids, lengths, strict=True)):
                 decoder = StreamingDecoder(lexicon, beam_width=args.beam_width,
-                                           lexical_beam=args.lexical_beam)
+                                           lexical_beam=args.lexical_beam,
+                                           soft_rest_boundaries=args.soft_rest_boundaries,
+                                           rest_boundary_bonus=args.rest_boundary_bonus)
                 decoder.accept(probabilities_from_logits(
                     logits, checkpoint["phones"], int(length), index
                 ))
@@ -169,7 +191,7 @@ def main() -> None:
                     "split": "validation",
                     "reference_words": reference,
                     "reference_phones": row["phonemes"],
-                    "greedy_visual_phones": [PHONES[token - 1] for token in greedy[index]],
+                    "greedy_visual_tokens": [inventory[token - 1] for token in greedy[index]],
                     "decoder_status": result["status"],
                     "candidates": candidates,
                     "top_1_word_errors": top_error,

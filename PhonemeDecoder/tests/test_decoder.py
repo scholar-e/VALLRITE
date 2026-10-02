@@ -40,6 +40,23 @@ class DecoderTests(unittest.TestCase):
         decoder.accept([row('<blank>'), row('P')])
         self.assertEqual(decoder.result()['candidates'][0]['text'], 'p p')
 
+    def test_explicit_rest_requires_completed_word_and_segments(self):
+        inventory = ('P', 'AE', 'rest')
+        lex = Lexicon({'phone_inventory': inventory, 'words': [
+            {'id': 'p', 'text': 'p', 'pronunciations': [
+                {'id': 'p', 'phones': ['P'], 'prior': 1}]},
+            {'id': 'pat', 'text': 'pat', 'pronunciations': [
+                {'id': 'pat', 'phones': ['P', 'AE'], 'prior': 1}]},
+        ]})
+        vocabulary = ('<blank>',) + inventory
+        rest_row = lambda phone: [float(value == phone) for value in vocabulary]
+        decoder = StreamingDecoder(lex, beam_width=16)
+        decoder.accept([rest_row('P'), rest_row('rest'), rest_row('P')])
+        self.assertEqual(decoder.result()['candidates'][0]['text'], 'p p')
+        soft = StreamingDecoder(lex, beam_width=16, soft_rest_boundaries=True)
+        soft.accept([rest_row('P'), rest_row('rest'), rest_row('AE')])
+        self.assertEqual(soft.result()['candidates'][0]['text'], 'pat')
+
     def test_homophones_and_shared_prefix(self):
         decoder = StreamingDecoder(lexicon([('a', ['P']), ('b', ['P']), ('c', ['P','AE'])]))
         decoder.accept([row('P')])

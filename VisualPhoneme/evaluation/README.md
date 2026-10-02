@@ -268,6 +268,68 @@ These lower group numbers measure recovery up to visual equivalence and must not
 be reported as ordinary PER. The selected checkpoint is 36 MB and all ten
 validated epoch checkpoints were retained.
 
+### Direct visual-group objective
+
+As a controlled ablation, the same 9.4M architecture and 88,949 chunks were
+trained to predict the 17 visual groups directly instead of the 39 phones. The
+run stopped after 12 epochs and retained every epoch checkpoint. With the same
+frozen beam-64 decoder and language-model weight 0.5, the selected checkpoint
+reaches 65.92% group PER at N=1, 64.11% oracle group PER at N=5, and 62.68% at
+N=20. This improves the post-hoc grouping of the strict-phone model by 1.22
+points at N=5 and 1.32 points at N=20.
+
+These results are **group PER only**. A group prediction deliberately preserves
+all member-phone alternatives, so it cannot be converted into ordinary
+39-phone PER without a separate disambiguating decoder. The modest gain shows
+that direct group supervision helps the intended probabilistic handoff, while
+the large remaining error and widening train/validation gap point to visual
+representation and generalization as the next bottlenecks.
+
+Evaluation-time modality masking on that selected checkpoint keeps all weights,
+examples, and decoder settings fixed. Removing mouth pixels raises oracle group
+PER@5 from 64.11% to 70.39%; removing coordinates raises it to 65.88%. At N=20,
+the corresponding values are 62.68%, 69.03%, and 64.42%. Both modalities are
+therefore complementary, but the larger image-removal penalty shows that pixels
+carry most of the discriminative visual evidence despite the learned 23% image
+gate. The gate scales feature tensors and is not an attribution percentage.
+This masking test measures dependence of the trained hybrid; separately trained
+unimodal models remain a different, more expensive ablation.
+
+### Lightweight patch-transformer ablation
+
+The CNN frame encoder was replaced by a three-layer spatial transformer using
+16-by-16 patches (36 tokens for each 96-by-96 mouth frame). Landmarks, the
+384-channel temporal decoder, group targets, optimizer, data, regularization,
+and 30-minute training ceiling were unchanged. The resulting model has
+10,403,795 parameters and selected epoch 8 from 11 validated epochs.
+
+Under the matched beam-64 evaluation, the transformer reaches 66.12% group PER
+at N=1, 64.22% at N=5, and 62.71% at N=20. The CNN reaches 65.92%, 64.11%, and
+62.68%, respectively. The scratch-trained transformer is therefore effectively
+tied but consistently worse; it is not promoted over the CNN. A future
+transformer experiment should test relevant visual-speech pretraining rather
+than adding more randomly initialized attention layers.
+
+### Auto-AVSR visual-speech pretraining
+
+The published Auto-AVSR LRS3 visual-only checkpoint was downloaded from the
+official model zoo and all 120 Conv3D/ResNet-18 frontend tensors were loaded
+without importing its legacy ESPnet stack. The resulting hybrid has 20,318,419
+parameters. After one frozen-frontend warm-up and a batch-32 resumed fine-tune,
+epoch 3 reaches 60.97% group PER at N=1, 59.18% at N=5, and 57.69% at N=20 with
+the matched beam-64 evaluation. This improves the scratch CNN by about five PER
+points and confirms that relevant visual-speech pretraining matters more than
+replacing the frontend with a randomly initialized transformer.
+
+A separate group-to-word evaluation mapped every CMUdict pronunciation into
+the 17-group inventory and used the bounded pronunciation-only lexical decoder
+(beam 16, lexical beam 32). Across all 1,140 development-validation clips it
+produces 178.85% top-1 WER and 178.45% oracle WER@5. Insertions allow WER to
+exceed 100%. This is the VALLRITE group checkpoint plus its simple lexicon; it
+is not the upstream Auto-AVSR word decoder or its published 19.1% LRS3 test WER.
+The result shows that visual grouping needs a strong contextual word decoder or
+parallel strict-phone evidence rather than direct pronunciation-only lookup.
+
 Complete local artifacts are ignored by Git at
 `checkpoints/visual-phoneme-fusion/`: `best.pt`, `metrics.json`, and `train.log`.
 The selected fusion checkpoint was saved at epoch 20. Earlier checkpoints remain

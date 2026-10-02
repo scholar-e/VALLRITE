@@ -1,0 +1,9 @@
+2026-10-01 21:07:17,870 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:111 - device=cuda records=20 generations=100 baseline=unadapted-base-diagnostic
+2026-10-01 21:07:18,789 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:126 - generated=16/100
+2026-10-01 21:07:19,404 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:126 - generated=32/100
+2026-10-01 21:07:20,002 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:126 - generated=48/100
+2026-10-01 21:07:20,609 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:126 - generated=64/100
+2026-10-01 21:07:21,203 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:126 - generated=80/100
+2026-10-01 21:07:21,789 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:126 - generated=96/100
+2026-10-01 21:07:22,355 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:126 - generated=100/100
+2026-10-01 21:07:22,359 - competitive_word_decoder.vallr_qwen - INFO - evaluate_vallr_qwen.py:169 - complete top1_WER=136.74% oracle_WER@5=131.06% elapsed=4.5s

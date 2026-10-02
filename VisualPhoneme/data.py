@@ -114,7 +114,7 @@ def transform_landmarks(landmarks: torch.Tensor, mode: str, features: str = "pos
                         point_dropout: float = 0.0, frame_span_dropout: float = 0.0,
                         max_frame_span: int = 5) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply a checkpointed coordinate representation and return its frame mask."""
-    if mode not in {"eye-normalized", "clip-centered", "constant"}:
+    if mode not in {"eye-normalized", "pose-frontalized", "clip-centered", "constant"}:
         raise ValueError(f"invalid coordinate mode: {mode}")
     landmark_mask = torch.isfinite(landmarks).all(dim=(1, 2))
     if mode == "clip-centered" and landmark_mask.any():
@@ -160,6 +160,24 @@ def fit_bigram_log_probs(sequences, classes: int, smoothing: float = 1.0) -> tor
     return result
 
 
+def fit_trigram_log_probs(sequences, classes: int, smoothing: float = 1.0) -> torch.Tensor:
+    """Fit a smoothed trigram LM; zero-valued history slots mark sequence start."""
+    if classes < 2 or smoothing <= 0:
+        raise ValueError("classes must exceed one and smoothing must be positive")
+    counts = torch.full((classes, classes, classes), smoothing, dtype=torch.float64)
+    counts[:, :, BLANK_ID] = 0
+    for sequence in sequences:
+        older = previous = BLANK_ID
+        for token in sequence:
+            token = int(token)
+            counts[older, previous, token] += 1
+            older, previous = previous, token
+    probabilities = counts[:, :, 1:] / counts[:, :, 1:].sum(dim=2, keepdim=True)
+    result = torch.zeros((classes, classes, classes), dtype=torch.float32)
+    result[:, :, 1:] = probabilities.log().float()
+    return result
+
+
 class GridClips(Dataset):
     landmark_points = 41
 
@@ -174,7 +192,8 @@ class GridClips(Dataset):
             raise ValueError(f"invalid split: {split}")
         if crop not in CROPS:
             raise ValueError(f"invalid crop: {crop}")
-        if coordinate_mode not in {"eye-normalized", "clip-centered", "constant"}:
+        if coordinate_mode not in {"eye-normalized", "pose-frontalized",
+                                   "clip-centered", "constant"}:
             raise ValueError(f"invalid coordinate mode: {coordinate_mode}")
         landmark_feature_dimensions(coordinate_features)
         if (landmark_jitter < 0 or not 0 <= point_dropout < 1
@@ -367,7 +386,8 @@ def ctc_prefix_beam_search(log_probabilities: torch.Tensor, beam_width: int = 16
                            top_n: int = 5,
                            token_top_k: int | None = None,
                            transition_log_probs: torch.Tensor | None = None,
-                           lm_weight: float = 0.0) -> list[tuple[list[int], float]]:
+                           lm_weight: float = 0.0,
+                           token_bonus: float = 0.0) -> list[tuple[list[int], float]]:
     """Return CTC label sequences and log scores using prefix beam search."""
     if log_probabilities.ndim != 2:
         raise ValueError("log_probabilities must have shape [time,classes]")
@@ -375,13 +395,26 @@ def ctc_prefix_beam_search(log_probabilities: torch.Tensor, beam_width: int = 16
         raise ValueError("beam_width must be at least top_n >= 1")
     if token_top_k is not None and token_top_k < 1:
         raise ValueError("token_top_k must be positive")
-    if lm_weight < 0:
+    if lm_weight < 0 or not math.isfinite(token_bonus):
         raise ValueError("lm_weight must be nonnegative")
     probabilities = log_probabilities.detach().float().cpu()
     transitions = transition_log_probs.detach().float().cpu() if transition_log_probs is not None else None
-    if transitions is not None and transitions.shape != (probabilities.shape[1], probabilities.shape[1]):
-        raise ValueError("transition_log_probs must have shape [classes,classes]")
+    classes = probabilities.shape[1]
+    if transitions is not None and transitions.shape not in {
+            (classes, classes), (classes, classes, classes)}:
+        raise ValueError("transition_log_probs must be a bigram or trigram tensor")
     transition_values = transitions.tolist() if transitions is not None else None
+
+    def language_bonus(prefix: tuple[int, ...], token: int) -> float:
+        if transition_values is None:
+            return token_bonus
+        previous = prefix[-1] if prefix else BLANK_ID
+        if transitions.ndim == 2:
+            value = transition_values[previous][token]
+        else:
+            older = prefix[-2] if len(prefix) > 1 else BLANK_ID
+            value = transition_values[older][previous][token]
+        return lm_weight * value + token_bonus
     beams: dict[tuple[int, ...], tuple[float, float]] = {(): (0.0, -math.inf)}
     for frame in probabilities:
         frame_values = frame.tolist()
@@ -407,17 +440,14 @@ def ctc_prefix_beam_search(log_probabilities: torch.Tensor, beam_width: int = 16
                     extended = prefix + (token,)
                     ext_blank, ext_token = next_beams.get(extended,
                                                            (-math.inf, -math.inf))
-                    lm_bonus = (lm_weight * transition_values[prefix[-1]][token]
-                                if transition_values is not None else 0.0)
+                    lm_bonus = language_bonus(prefix, token)
                     ext_token = _log_add(ext_token, blank_score + value + lm_bonus)
                     next_beams[extended] = (ext_blank, ext_token)
                 else:
                     extended = prefix + (token,)
                     ext_blank, ext_token = next_beams.get(extended,
                                                            (-math.inf, -math.inf))
-                    previous = prefix[-1] if prefix else BLANK_ID
-                    lm_bonus = (lm_weight * transition_values[previous][token]
-                                if transition_values is not None else 0.0)
+                    lm_bonus = language_bonus(prefix, token)
                     ext_token = _log_add(ext_token, blank_score + value + lm_bonus,
                                          token_score + value + lm_bonus)
                     next_beams[extended] = (ext_blank, ext_token)

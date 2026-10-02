@@ -293,6 +293,185 @@ class LargeGatedFusionVisualPhoneme(nn.Module):
         return sum(parameter.numel() for parameter in self.parameters())
 
 
+class LargeVisualPhoneme(nn.Module):
+    """Image-only counterpart whose visual path matches large gated fusion."""
+
+    def __init__(self, classes: int = 40, width: int = 384):
+        super().__init__()
+        self.frame_encoder = nn.Sequential(
+            ConvBlock(1, 32), ConvBlock(32, 64), ConvBlock(64, 128),
+            ConvBlock(128, 192), nn.AdaptiveAvgPool2d(1),
+        )
+        self.image_projection = nn.Sequential(
+            nn.Linear(192, width), nn.LayerNorm(width), nn.SiLU(inplace=True),
+        )
+        dilations = (1, 2, 4, 8, 16, 1, 2, 4, 8, 16)
+        self.temporal = nn.Sequential(
+            *(LargeTemporalBlock(width, dilation) for dilation in dilations)
+        )
+        self.classifier = nn.Linear(width, classes)
+
+    def forward(self, video: torch.Tensor) -> torch.Tensor:
+        if video.ndim != 5 or video.shape[2] != 1:
+            raise ValueError("video must have shape [batch,time,1,height,width]")
+        batch, steps, channels, height, width = video.shape
+        images = self.frame_encoder(
+            video.reshape(batch * steps, channels, height, width)
+        ).flatten(1)
+        encoded = self.image_projection(images)
+        encoded = encoded.reshape(batch, steps, -1).transpose(1, 2)
+        return self.classifier(self.temporal(encoded).transpose(1, 2)).transpose(0, 1)
+
+    @property
+    def parameter_count(self) -> int:
+        return sum(parameter.numel() for parameter in self.parameters())
+
+
+class PatchTransformerEncoder(nn.Module):
+    """Small spatial transformer for one-channel mouth crops."""
+
+    def __init__(self, output_width: int, patch_size: int = 16,
+                 embedding_width: int = 192, layers: int = 3, heads: int = 6):
+        super().__init__()
+        self.patch_embed = nn.Conv2d(
+            1, embedding_width, kernel_size=patch_size, stride=patch_size, bias=False
+        )
+        self.position = nn.Parameter(torch.zeros(1, 36, embedding_width))
+        encoder_layer = nn.TransformerEncoderLayer(
+            embedding_width, heads, embedding_width * 4, dropout=0.1,
+            activation="gelu", batch_first=True, norm_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer, layers, norm=nn.LayerNorm(embedding_width)
+        )
+        self.projection = nn.Sequential(
+            nn.Linear(embedding_width, output_width), nn.LayerNorm(output_width),
+            nn.SiLU(inplace=True),
+        )
+        nn.init.trunc_normal_(self.position, std=0.02)
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        patches = self.patch_embed(images).flatten(2).transpose(1, 2)
+        if patches.shape[1] == self.position.shape[1]:
+            position = self.position
+        else:
+            # Interpolate the learned square grid for non-default crop sizes.
+            source_side = int(self.position.shape[1] ** 0.5)
+            target_side = int(patches.shape[1] ** 0.5)
+            if target_side * target_side != patches.shape[1]:
+                raise ValueError("mouth crop must produce a square patch grid")
+            position = nn.functional.interpolate(
+                self.position.transpose(1, 2).reshape(
+                    1, self.position.shape[2], source_side, source_side
+                ),
+                size=(target_side, target_side), mode="bicubic", align_corners=False,
+            ).flatten(2).transpose(1, 2)
+        return self.projection(self.encoder(patches + position).mean(dim=1))
+
+
+class LargeTransformerFusionVisualPhoneme(LargeGatedFusionVisualPhoneme):
+    """Landmark hybrid with a lightweight per-frame mouth-patch transformer."""
+
+    def __init__(self, classes: int = 40, width: int = 384,
+                 landmark_points: int = 41, coordinate_dimensions: int = 2,
+                 landmark_bottleneck: int | None = 128,
+                 image_gate_probability: float = 0.05):
+        super().__init__(classes, width, landmark_points, coordinate_dimensions,
+                         landmark_bottleneck, image_gate_probability)
+        self.frame_encoder = PatchTransformerEncoder(width)
+        self.image_projection = nn.Identity()
+
+
+class AutoAvsrResidualBlock(nn.Module):
+    """ResNet basic block matching the published Auto-AVSR visual frontend."""
+
+    def __init__(self, inputs: int, outputs: int, stride: int = 1):
+        super().__init__()
+        self.conv1 = nn.Conv2d(inputs, outputs, 3, stride=stride, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(outputs)
+        self.conv2 = nn.Conv2d(outputs, outputs, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(outputs)
+        self.downsample = (nn.Sequential(
+            nn.Conv2d(inputs, outputs, 1, stride=stride, bias=False),
+            nn.BatchNorm2d(outputs),
+        ) if stride != 1 or inputs != outputs else None)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        residual = inputs if self.downsample is None else self.downsample(inputs)
+        outputs = torch.nn.functional.silu(self.bn1(self.conv1(inputs)))
+        outputs = self.bn2(self.conv2(outputs)) + residual
+        return torch.nn.functional.silu(outputs)
+
+
+class AutoAvsrVisualFrontend(nn.Module):
+    """Dependency-free implementation of Auto-AVSR's published Conv3D/ResNet-18."""
+
+    def __init__(self):
+        super().__init__()
+        self.frontend3D = nn.Sequential(
+            nn.Conv3d(1, 64, (5, 7, 7), (1, 2, 2), (2, 3, 3), bias=False),
+            nn.BatchNorm3d(64), nn.SiLU(inplace=True),
+            nn.MaxPool3d((1, 3, 3), (1, 2, 2), (0, 1, 1)),
+        )
+        channels = (64, 128, 256, 512)
+        inputs = 64
+        layers = []
+        for index, outputs in enumerate(channels):
+            stride = 1 if index == 0 else 2
+            layers.append(nn.Sequential(
+                AutoAvsrResidualBlock(inputs, outputs, stride),
+                AutoAvsrResidualBlock(outputs, outputs),
+            ))
+            inputs = outputs
+        self.trunk = nn.Module()
+        self.trunk.layer1, self.trunk.layer2, self.trunk.layer3, self.trunk.layer4 = layers
+        self.trunk.avgpool = nn.AdaptiveAvgPool2d(1)
+
+    def forward(self, video: torch.Tensor) -> torch.Tensor:
+        # Input/output retain [batch,time] so the 3D stem learns short motion.
+        features = self.frontend3D(video.transpose(1, 2)).transpose(1, 2)
+        batch, steps, channels, height, width = features.shape
+        features = features.reshape(batch * steps, channels, height, width)
+        for name in ("layer1", "layer2", "layer3", "layer4"):
+            features = getattr(self.trunk, name)(features)
+        features = self.trunk.avgpool(features).flatten(1)
+        return features.reshape(batch, steps, -1)
+
+
+class AutoAvsrFusionVisualPhoneme(LargeGatedFusionVisualPhoneme):
+    """Hybrid group recognizer using a visual-speech-pretrained Auto-AVSR frontend."""
+
+    def __init__(self, classes: int = 40, width: int = 384,
+                 landmark_points: int = 41, coordinate_dimensions: int = 2,
+                 landmark_bottleneck: int | None = 128,
+                 image_gate_probability: float = 0.05):
+        super().__init__(classes, width, landmark_points, coordinate_dimensions,
+                         landmark_bottleneck, image_gate_probability)
+        self.frame_encoder = AutoAvsrVisualFrontend()
+        self.image_projection = nn.Sequential(
+            nn.Linear(512, width), nn.LayerNorm(width), nn.SiLU(inplace=True),
+        )
+
+    def forward(self, video: torch.Tensor, landmarks: torch.Tensor,
+                landmark_mask: torch.Tensor) -> torch.Tensor:
+        expected = (self.landmark_points, self.coordinate_dimensions)
+        if video.ndim != 5 or video.shape[2] != 1:
+            raise ValueError("video must have shape [batch,time,1,height,width]")
+        if landmarks.shape[:2] != video.shape[:2] or landmarks.shape[2:] != expected:
+            raise ValueError(f"landmarks must have trailing shape {expected}")
+        batch, steps = video.shape[:2]
+        images = self.image_projection(self.frame_encoder(video))
+        visibility = landmark_mask.reshape(batch * steps, 1).to(landmarks.dtype)
+        coordinates = torch.nan_to_num(landmarks).reshape(batch * steps, -1)
+        geometry = self.landmark_encoder(
+            torch.cat((coordinates, visibility), dim=1)
+        ).reshape(batch, steps, -1) * visibility.reshape(batch, steps, 1)
+        encoded = geometry + self.image_gate_logit.sigmoid() * images
+        return self.classifier(
+            self.temporal(encoded.transpose(1, 2)).transpose(1, 2)
+        ).transpose(0, 1)
+
+
 class CompactTongueGatedFusionVisualPhoneme(CompactGatedFusionVisualPhoneme):
     """Add an observability-gated inner-mouth residual to coordinate-first fusion.
 

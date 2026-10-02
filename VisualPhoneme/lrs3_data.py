@@ -18,6 +18,7 @@ from VisualPhoneme.data import (
     letterbox,
     transform_landmarks,
 )
+from VisualPhoneme.visemes import REST_PHONE_ID
 
 
 # Put semantically meaningful lip points first so the tongue-gated model's
@@ -38,6 +39,15 @@ RIGHT_EYE_POSITIONS = tuple(
     position for position, source in enumerate(LRS3_LANDMARK_ORDER)
     if 42 <= source <= 47
 )
+STABLE_POSE_POSITIONS = tuple(
+    position for position, source in enumerate(LRS3_LANDMARK_ORDER)
+    if 27 <= source <= 47
+)
+_MIRROR_PAIRS = ((31, 35), (32, 34), (36, 45), (37, 44), (38, 43),
+                 (39, 42), (40, 47), (41, 46))
+_MIDLINE_POINTS = (27, 28, 29, 30, 33)
+_SOURCE_TO_POSITION = {source: position for position, source in
+                       enumerate(LRS3_LANDMARK_ORDER)}
 
 
 def _words(value: str) -> list[str]:
@@ -56,7 +66,8 @@ def _sequence_agreement(left: list[str], right: list[str]) -> float:
 
 
 def _teacher_chunks(row: dict, document: dict, max_phones: int,
-                    transcript_agreement: float) -> list[dict]:
+                    transcript_agreement: float, include_rest_targets: bool = False,
+                    min_rest_seconds: float = 0.08) -> list[dict]:
     teacher_transcripts = document.get("provenance", {}).get("teacher_transcripts", [])
     teacher_words = list(teacher_transcripts[0]) if teacher_transcripts else [
         str(entry[2]) for entry in document["tiers"]["words"]["entries"]
@@ -93,6 +104,16 @@ def _teacher_chunks(row: dict, document: dict, max_phones: int,
         end = min(source_frames / fps, words[-1][1] + 0.04)
         frame_start = max(0, int(np.floor(start * fps)))
         frame_end = min(source_frames, int(np.ceil(end * fps)))
+        target_ids = []
+        rest_intervals = []
+        for word_index, group in enumerate(words):
+            if word_index:
+                gap_start, gap_end = words[word_index - 1][1], group[0]
+                if include_rest_targets and gap_end - gap_start >= min_rest_seconds:
+                    target_ids.append(REST_PHONE_ID)
+                    margin = min(0.04, (gap_end - gap_start) / 4)
+                    rest_intervals.append((gap_start + margin, gap_end - margin))
+            target_ids.extend(PHONE_TO_ID[phone] for phone in group[3])
         phones = [phone for group in words for phone in group[3]]
         chunk = dict(row)
         chunk.update({
@@ -102,6 +123,8 @@ def _teacher_chunks(row: dict, document: dict, max_phones: int,
             "frame_end": frame_end,
             "frames": frame_end - frame_start,
             "phonemes": phones,
+            "target_ids": target_ids,
+            "rest_intervals": rest_intervals,
             "transcript": " ".join(group[2] for group in words),
             "teacher_transcript_agreement": agreement,
             "teacher_chunk_index": index,
@@ -118,6 +141,9 @@ def _teacher_chunks(row: dict, document: dict, max_phones: int,
                     normalized = re.sub(r"\d", "", str(phone)).upper()
                     phone_id = PHONE_TO_ID.get(normalized, -100)
                     break
+            if phone_id == -100 and any(rest_start <= timestamp < rest_end
+                                        for rest_start, rest_end in rest_intervals):
+                phone_id = REST_PHONE_ID
             aligned.append(phone_id)
         chunk["frame_phone_ids"] = aligned
         chunks.append(chunk)
@@ -167,6 +193,44 @@ def eye_normalize_lrs3(points: torch.Tensor) -> torch.Tensor:
     return (points - center[:, None, :]) / scale[:, None, None]
 
 
+def frontalize_lrs3(points: torch.Tensor) -> torch.Tensor:
+    """Remove 2D head pose using stable eye/nose points and a symmetric template.
+
+    The input must already be eye-normalized. The template is the clip median,
+    symmetrized using the known 68-point topology. Mouth and jaw points never
+    participate in fitting, so their articulation is transformed rather than
+    normalized away. This compensates in-plane affine pose; it cannot recreate
+    geometry occluded by a large 3D head turn.
+    """
+    valid = torch.isfinite(points).all(dim=(1, 2))
+    if not valid.any():
+        return points
+    template = points[valid].median(dim=0).values.clone()
+    for left_source, right_source in _MIRROR_PAIRS:
+        left = _SOURCE_TO_POSITION[left_source]
+        right = _SOURCE_TO_POSITION[right_source]
+        extent = (template[left, 0].abs() + template[right, 0].abs()) / 2
+        height = (template[left, 1] + template[right, 1]) / 2
+        template[left] = torch.stack((-extent, height))
+        template[right] = torch.stack((extent, height))
+    for source in _MIDLINE_POINTS:
+        template[_SOURCE_TO_POSITION[source], 0] = 0
+
+    stable = torch.tensor(STABLE_POSE_POSITIONS, device=points.device)
+    target = template[stable]
+    result = points.clone()
+    valid_points = points[valid]
+    source = valid_points[:, stable]
+    design = torch.cat((source, torch.ones_like(source[:, :, :1])), dim=2)
+    targets = target.unsqueeze(0).expand(len(source), -1, -1)
+    affine = torch.linalg.lstsq(design, targets).solution
+    all_design = torch.cat(
+        (valid_points, torch.ones_like(valid_points[:, :, :1])), dim=2
+    )
+    result[valid] = torch.bmm(all_design, affine)
+    return result
+
+
 def _mouth_crop(frame: np.ndarray, points: np.ndarray | None) -> np.ndarray:
     height, width = frame.shape[:2]
     if points is None or not np.isfinite(points).all():
@@ -187,14 +251,19 @@ def _mouth_crop(frame: np.ndarray, points: np.ndarray | None) -> np.ndarray:
 
 
 def decode_lrs3_video(path: Path, landmarks: np.ndarray | None, crop: str,
-                      size: int) -> torch.Tensor:
+                      size: int, frame_start: int = 0,
+                      frame_end: int | None = None) -> torch.Tensor:
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
         raise OSError(f"cannot open video: {path}")
     frames = []
     try:
-        index = 0
+        if frame_start:
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame_start)
+        index = frame_start
         while True:
+            if frame_end is not None and index >= frame_end:
+                break
             ok, frame = capture.read()
             if not ok:
                 break
@@ -245,12 +314,16 @@ class Lrs3Clips(Dataset):
         max_chunk_phones: int = 0,
         min_teacher_transcript_agreement: float = 0.8,
         include_frame_targets: bool = False,
+        include_rest_targets: bool = False,
+        min_rest_seconds: float = 0.08,
     ):
         if split not in {"train", "validation", "test"} or crop not in CROPS:
             raise ValueError("invalid LRS3 split or crop")
-        if coordinate_mode not in {"eye-normalized", "clip-centered", "constant"}:
+        if coordinate_mode not in {"eye-normalized", "pose-frontalized",
+                                   "clip-centered", "constant"}:
             raise ValueError(f"invalid coordinate mode: {coordinate_mode}")
-        if max_chunk_phones < 0 or not 0 <= min_teacher_transcript_agreement <= 1:
+        if (max_chunk_phones < 0 or not 0 <= min_teacher_transcript_agreement <= 1
+                or min_rest_seconds < 0):
             raise ValueError("invalid teacher chunk settings")
         if (teacher_labels_dir is None) != (max_chunk_phones == 0):
             raise ValueError("teacher labels and a positive chunk size must be used together")
@@ -280,12 +353,13 @@ class Lrs3Clips(Dataset):
             raise FileNotFoundError(f"prepare LRS3 first: missing {manifest}")
         candidates = [json.loads(line) for line in manifest.read_text().splitlines()]
         self.excluded = []
+        self.excluded_total = 0
+        def exclude(clip_id: str, reason: str) -> None:
+            self.excluded_total += 1
+            if len(self.excluded) < 100:
+                self.excluded.append({"clip_id": clip_id, "reason": reason})
         self.rows = []
         if teacher_labels_dir is not None:
-            if split != "train":
-                raise ValueError("teacher chunks are training-only")
-            if limit is not None:
-                candidates = candidates[:limit]
             label_manifest = teacher_labels_dir / "labels.jsonl"
             if not label_manifest.is_file():
                 raise FileNotFoundError(f"missing teacher manifest: {label_manifest}")
@@ -297,32 +371,30 @@ class Lrs3Clips(Dataset):
                 source = str((root / row["video"]).resolve())
                 record = labels.get(source)
                 if not record or not record.get("alignment"):
-                    self.excluded.append({"clip_id": row["clip_id"],
-                                          "reason": "no_teacher_alignment"})
+                    exclude(row["clip_id"], "no_teacher_alignment")
                     continue
                 document = json.loads(Path(record["alignment"]).read_text())
                 if document.get("label_status") != "accepted":
-                    self.excluded.append({"clip_id": row["clip_id"],
-                                          "reason": "teacher_rejected"})
+                    exclude(row["clip_id"], "teacher_rejected")
                     continue
                 chunks = _teacher_chunks(row, document, max_chunk_phones,
-                                          min_teacher_transcript_agreement)
+                                          min_teacher_transcript_agreement,
+                                          include_rest_targets, min_rest_seconds)
                 if not chunks:
-                    self.excluded.append({"clip_id": row["clip_id"],
-                                          "reason": "teacher_transcript_mismatch"})
+                    exclude(row["clip_id"], "teacher_transcript_mismatch")
                     continue
                 expanded.extend(chunks)
-            candidates = expanded
+            candidates = expanded[:limit] if limit is not None else expanded
         for row in candidates:
-            target = tuple(PHONE_TO_ID[phone] for phone in row["phonemes"])
+            target = tuple(row.get("target_ids") or
+                           [PHONE_TO_ID[phone] for phone in row["phonemes"]])
             repeated = sum(left == right for left, right in zip(target, target[1:]))
             if float(row.get("pronunciation_coverage", 1.0)) < 0.95:
-                self.excluded.append({"clip_id": row["clip_id"],
-                                      "reason": "low_pronunciation_coverage"})
+                exclude(row["clip_id"], "low_pronunciation_coverage")
             elif not target or len(target) + repeated > int(row["frames"]):
-                self.excluded.append({"clip_id": row["clip_id"], "reason": "invalid_ctc"})
+                exclude(row["clip_id"], "invalid_ctc")
             elif include_landmarks and not row.get("landmarks"):
-                self.excluded.append({"clip_id": row["clip_id"], "reason": "no_landmark_join"})
+                exclude(row["clip_id"], "no_landmark_join")
             else:
                 self.rows.append(row)
         if limit is not None and teacher_labels_dir is None:
@@ -332,7 +404,8 @@ class Lrs3Clips(Dataset):
         return len(self.rows)
 
     def target_sequences(self) -> list[tuple[int, ...]]:
-        return [tuple(PHONE_TO_ID[phone] for phone in row["phonemes"])
+        return [tuple(row.get("target_ids") or
+                      [PHONE_TO_ID[phone] for phone in row["phonemes"]])
                 for row in self.rows]
 
     def _landmarks(self, row: dict) -> tuple[np.ndarray | None, torch.Tensor | None]:
@@ -340,13 +413,17 @@ class Lrs3Clips(Dataset):
             return None, None
         raw = load_lrs3_landmarks(self.root / row["landmarks"])
         normalized = eye_normalize_lrs3(torch.from_numpy(raw.copy()))
+        if self.coordinate_mode == "pose-frontalized":
+            normalized = frontalize_lrs3(normalized)
         return raw, normalized
 
     def _video(self, row: dict, raw_landmarks: np.ndarray | None) -> torch.Tensor:
         source = self.root / row["video"]
+        segment_video = row.get("pretrain_chunk_index") is not None
         cache_path = None
         if self.frame_cache_dir is not None:
-            cache_id = row.get("source_clip_id", row["clip_id"])
+            cache_id = (row["clip_id"] if segment_video else
+                        row.get("source_clip_id", row["clip_id"]))
             safe_id = cache_id.replace("/", "_").replace(":", "_")
             cache_path = self.frame_cache_dir / self.crop_name / str(self.size) / f"{safe_id}.npy"
             if cache_path.is_file():
@@ -360,7 +437,11 @@ class Lrs3Clips(Dataset):
             video = torch.from_numpy(np.stack([letterbox(frame, self.size) for frame in frames]))
             video = video.unsqueeze(1).float().div_(255)
         else:
-            video = decode_lrs3_video(source, raw_landmarks, self.crop_name, self.size)
+            video = decode_lrs3_video(
+                source, raw_landmarks, self.crop_name, self.size,
+                int(row.get("frame_start", 0)) if segment_video else 0,
+                int(row["frame_end"]) if segment_video else None,
+            )
         if cache_path is not None:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             temporary = cache_path.with_name(f"{cache_path.name}.{id(self)}.tmp")
@@ -383,10 +464,11 @@ class Lrs3Clips(Dataset):
                 self.augment, self.landmark_jitter, self.point_dropout,
                 self.frame_span_dropout, self.max_frame_span,
             )
-        frame_start = int(row.get("frame_start", 0))
+        segment_video = row.get("pretrain_chunk_index") is not None
+        frame_start = 0 if segment_video else int(row.get("frame_start", 0))
         frame_end = int(row.get("frame_end", min(
             len(value) for value in (video, landmarks) if value is not None
-        )))
+        ))) if not segment_video else len(video)
         if video is not None:
             video = video[frame_start:frame_end]
         if landmarks is not None:
@@ -406,7 +488,8 @@ class Lrs3Clips(Dataset):
         if landmarks is not None:
             landmarks = landmarks[:frames]
             landmark_mask = landmark_mask[:frames]
-        target = torch.tensor([PHONE_TO_ID[phone] for phone in row["phonemes"]],
+        target = torch.tensor(row.get("target_ids") or
+                              [PHONE_TO_ID[phone] for phone in row["phonemes"]],
                               dtype=torch.long)
         frame_targets = None
         if self.include_frame_targets:

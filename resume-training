@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( $# != 1 )); then
+  echo "Usage: ./resume-training OUTPUT_DIR" >&2
+  exit 2
+fi
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+output_dir="$1"
+metrics="$output_dir/metrics.json"
+state="$output_dir/resume.pt"
+marker="$output_dir/PAUSE"
+
+if [[ ! -f "$metrics" || ! -f "$state" ]]; then
+  echo "Resume requires both $metrics and $state" >&2
+  exit 1
+fi
+if ! jq -e '.arguments | type == "object"' "$metrics" >/dev/null; then
+  echo "Invalid or incomplete metrics file: $metrics" >&2
+  exit 1
+fi
+
+# Refuse to start a duplicate trainer for this exact output directory.
+while read -r pid; do
+  [[ -r "/proc/$pid/cmdline" ]] || continue
+  mapfile -d '' -t running < "/proc/$pid/cmdline"
+  for ((index = 0; index + 1 < ${#running[@]}; index++)); do
+    if [[ "${running[index]}" == "--output-dir" &&
+          "${running[index + 1]}" == "$output_dir" ]]; then
+      echo "Training is already active for $output_dir (PID $pid)" >&2
+      exit 1
+    fi
+  done
+done < <(pgrep -f 'python.*-m VisualPhoneme\.train' || true)
+
+command=(tools/with-vpa-gpu .venv-vpa-gpu/bin/python -m VisualPhoneme.train)
+
+add_value() {
+  local flag="$1" key="$2" value
+  value=$(jq -er ".arguments.${key}" "$metrics")
+  command+=("$flag" "$value")
+}
+
+add_optional() {
+  local flag="$1" key="$2" value
+  value=$(jq -r ".arguments.${key} // empty" "$metrics")
+  if [[ -n "$value" ]]; then
+    command+=("$flag" "$value")
+  fi
+}
+
+add_value --dataset dataset
+add_value --data-root data_root
+command+=(--output-dir "$output_dir")
+add_value --crop crop
+add_value --image-size image_size
+add_value --epochs epochs
+add_value --batch-size batch_size
+add_value --workers workers
+add_value --learning-rate learning_rate
+add_optional --frontend-learning-rate frontend_learning_rate
+add_value --seed seed
+add_optional --train-limit train_limit
+add_optional --validation-limit validation_limit
+add_value --patience patience
+add_optional --max-minutes max_minutes
+add_optional --divergence-factor divergence_factor
+add_optional --baseline-failure-epochs baseline_failure_epochs
+add_value --architecture architecture
+
+if [[ $(jq -r '.arguments.horizontal_flip' "$metrics") == "true" ]]; then
+  command+=(--horizontal-flip)
+else
+  command+=(--no-horizontal-flip)
+fi
+
+add_value --coordinate-mode coordinate_mode
+add_value --coordinate-features coordinate_features
+add_value --landmark-jitter landmark_jitter
+add_value --point-dropout point_dropout
+add_value --frame-span-dropout frame_span_dropout
+add_value --max-frame-span max_frame_span
+add_value --landmark-bottleneck landmark_bottleneck
+add_value --image-modality-dropout image_modality_dropout
+add_value --coordinate-modality-dropout coordinate_modality_dropout
+add_value --freeze-coordinate-epochs freeze_coordinate_epochs
+add_value --freeze-image-epochs freeze_image_epochs
+add_optional --pretrained-visual-frontend pretrained_visual_frontend
+add_value --image-gate-initial-probability image_gate_initial_probability
+add_value --inner-mouth-gate-initial-probability inner_mouth_gate_initial_probability
+add_value --weight-decay weight_decay
+add_optional --frame-cache-dir frame_cache_dir
+add_value --top-n top_n
+add_value --beam-width beam_width
+add_value --beam-token-top-k beam_token_top_k
+add_value --selection-metric selection_metric
+add_value --lm-weight lm_weight
+add_value --lm-smoothing lm_smoothing
+add_value --ctc-upsample-factor ctc_upsample_factor
+add_optional --lrs3-teacher-labels lrs3_teacher_labels
+add_value --max-chunk-phones max_chunk_phones
+add_value --min-teacher-transcript-agreement min_teacher_transcript_agreement
+add_value --aligned-frame-loss-weight aligned_frame_loss_weight
+add_value --frame-only-epochs frame_only_epochs
+add_value --ctc-loss-weight ctc_loss_weight
+add_value --checkpoint-every checkpoint_every
+add_value --target-inventory target_inventory
+command+=(--resume-state "$state")
+
+rm -f "$marker"
+safe_name=$(basename "$output_dir" | tr -c 'A-Za-z0-9_.-' '-')
+unit="vallrite-${safe_name}-$(date +%s)"
+
+cd "$repo_root"
+systemd-run --user --collect --unit="$unit" \
+  --working-directory="$repo_root" \
+  --setenv=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  "${command[@]}"
+
+echo "Removed pause marker and launched detached unit: $unit.service"
+echo "Monitor with: tools/watch-visual-training $output_dir"

@@ -13,12 +13,15 @@ import torch
 from VisualPhoneme.data import (CROPS, PHONEMES, ctc_prefix_beam_search,
                                       decode_video, greedy_decode, landmark_feature_dimensions,
                                       transform_landmarks)
-from VisualPhoneme.model import (CompactFusionVisualPhoneme,
+from VisualPhoneme.model import (AutoAvsrFusionVisualPhoneme,
+                                       CompactFusionVisualPhoneme,
                                        CompactGatedFusionVisualPhoneme,
                                        CompactLandmarkPhoneme,
                                        CompactTongueGatedFusionVisualPhoneme,
                                        CompactVisualPhoneme,
-                                       LargeGatedFusionVisualPhoneme)
+                                       LargeGatedFusionVisualPhoneme,
+                                       LargeTransformerFusionVisualPhoneme)
+from VisualPhoneme.lrs3_data import eye_normalize_lrs3, frontalize_lrs3
 from VisualPhoneme.train import upsample_ctc_logits
 from VisualPhoneme.visemes import (VISUAL_GROUPS, VISUAL_PHONE_GROUPS,
                                    visual_group_alternatives,
@@ -86,23 +89,29 @@ def main() -> None:
     crop_name = checkpoint["crop"]
     architecture = checkpoint.get("architecture", "image")
     if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
-                        "large-gated-fusion"} and (
+                        "large-gated-fusion", "large-transformer-fusion",
+                        "autoavsr-fusion"} and (
             args.landmarks_npz is None or not args.landmarks_npz.is_file()):
         parser.error("a coordinate checkpoint requires an existing --landmarks-npz cache")
     model_classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
                      "fusion": CompactFusionVisualPhoneme,
                      "gated-fusion": CompactGatedFusionVisualPhoneme,
                      "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme,
-                     "large-gated-fusion": LargeGatedFusionVisualPhoneme}
+                     "large-gated-fusion": LargeGatedFusionVisualPhoneme,
+                     "large-transformer-fusion": LargeTransformerFusionVisualPhoneme,
+                     "autoavsr-fusion": AutoAvsrFusionVisualPhoneme}
     model_args = {"classes": len(phones) + 1}
     if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
-                        "large-gated-fusion"}:
+                        "large-gated-fusion", "large-transformer-fusion",
+                        "autoavsr-fusion"}:
         model_args["landmark_points"] = int(checkpoint["landmark_points"])
         model_args["coordinate_dimensions"] = int(checkpoint.get("coordinate_dimensions", 2))
     if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion",
-                        "large-gated-fusion"}:
+                        "large-gated-fusion", "large-transformer-fusion",
+                        "autoavsr-fusion"}:
         model_args["landmark_bottleneck"] = checkpoint.get("landmark_bottleneck")
-    if architecture in {"gated-fusion", "tongue-gated-fusion", "large-gated-fusion"}:
+    if architecture in {"gated-fusion", "tongue-gated-fusion", "large-gated-fusion",
+                        "large-transformer-fusion", "autoavsr-fusion"}:
         model_args["image_gate_probability"] = checkpoint.get(
             "image_gate_initial_probability", 0.002472623
         )
@@ -115,10 +124,12 @@ def main() -> None:
     model.eval()
     video = (decode_video(args.video, CROPS[crop_name], int(checkpoint["image_size"]))
              if architecture in {"image", "fusion", "gated-fusion",
-                                 "tongue-gated-fusion", "large-gated-fusion"} else None)
+                                 "tongue-gated-fusion", "large-gated-fusion",
+                                 "large-transformer-fusion", "autoavsr-fusion"} else None)
     landmarks = landmark_mask = None
     if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
-                        "large-gated-fusion"}:
+                        "large-gated-fusion", "large-transformer-fusion",
+                        "autoavsr-fusion"}:
         with np.load(args.landmarks_npz) as cached:
             landmarks = torch.from_numpy(cached["coordinates"].astype(np.float32))
         frames = min(len(video), len(landmarks)) if video is not None else len(landmarks)
@@ -130,12 +141,17 @@ def main() -> None:
         expected_dimensions = landmark_feature_dimensions(coordinate_features)
         if expected_dimensions != int(checkpoint.get("coordinate_dimensions", 2)):
             raise ValueError("checkpoint coordinate feature dimensions are inconsistent")
+        if coordinate_mode == "pose-frontalized":
+            if landmarks.shape[1:] != (68, 2):
+                raise ValueError("pose frontalization requires raw 68-point 2D landmarks")
+            landmarks = frontalize_lrs3(eye_normalize_lrs3(landmarks))
         landmarks, landmark_mask = transform_landmarks(
             landmarks, coordinate_mode, coordinate_features)
     input_frames = len(video) if video is not None else len(landmarks)
     with torch.inference_mode():
         if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                            "large-gated-fusion"}:
+                            "large-gated-fusion", "large-transformer-fusion",
+                            "autoavsr-fusion"}:
             logits = model(video.unsqueeze(0).to(device), landmarks.unsqueeze(0).to(device),
                            landmark_mask.unsqueeze(0).to(device))
         elif architecture == "coordinates":

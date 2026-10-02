@@ -23,6 +23,22 @@ corners and inner-lip aperture points are given stable leading positions so the
 hybrid and observability-gated branches retain their intended semantics.
 Missing detections remain time-aligned as masked `NaN` frames.
 
+The 403-hour LRS3 pretrain partition can be added to the existing 30-hour
+trainval manifest with:
+
+```bash
+.venv-vpa-gpu/bin/python -m VisualPhoneme.prepare_lrs3 \
+  --root datasets/lrs3 --include-pretrain --pretrain-max-phones 16
+```
+
+This uses LRS3's supplied word boundaries to divide long recordings into short
+CTC-safe chunks. The pretrain release does not include matching 68-point tracks,
+so `--architecture large-image` provides a 9.26M-parameter image/temporal model
+whose `frame_encoder` and `image_projection` tensor shapes exactly match
+`large-gated-fusion`. Its visual path can therefore be transferred with
+`--initialize-image-checkpoint` before hybrid fine-tuning. Validation remains
+the original AV-HuBERT 1,200-ID split and pretrain material is training-only.
+
 An LRS3 hybrid training run can then be launched with:
 
 ```bash
@@ -394,6 +410,69 @@ reanalyzed later. Use `--checkpoint-every N` to retain a coarser interval or
 and line number and are flushed at epoch boundaries. The test speakers are
 intentionally absent from the training command; a separate frozen test evaluator
 should be added only after model choices are complete.
+
+Long runs also write `resume.pt` after every validated epoch and whenever they
+pause at a batch boundary. Create `OUTPUT_DIR/PAUSE`, or send `SIGINT`/`SIGTERM`,
+to request a clean pause. Remove the marker before resuming, then repeat the
+original command with `--resume-state OUTPUT_DIR/resume.pt`. The resume state
+restores weights, optimizer moments, scheduler, random-number generators,
+selection history, and early-stopping counters. If paused partway through an
+epoch, completed optimizer updates are retained and that epoch is replayed with
+a fresh shuffle; epoch-boundary resumes are exact. `--max-minutes` uses the same
+clean state-writing path, so a bounded run can be extended later.
+
+Monitor a live run without affecting it:
+
+```bash
+tools/watch-visual-training \
+  checkpoints/lrs3-pretrain-433h-large-image-gpu-20260923-v2
+```
+
+The optional second argument is the refresh interval in seconds. The monitor
+shows within-epoch clip progress, the latest loss/PER line, validation results,
+GPU load, pause-marker status, and recently written checkpoints. Stopping the
+monitor with `Ctrl+C` does not signal or stop the trainer.
+
+Training starts its own thermal watchdog independently of this monitor. It
+checks the hottest NVIDIA GPU and CPU hwmon readings every second, pauses the
+trainer and its workers at GPU **80 °C** or CPU **85 °C**, and resumes only when
+the GPU is below **75 °C** and CPU below **80 °C**. Missing required sensor
+readings also pause training until readings recover. CPU-only runs do not
+require a GPU reading. Linux CPU drivers supported are `coretemp`, `k10temp`,
+`k8temp`, and `zenpower`; CUDA runs need `nvidia-smi` available on the host.
+
+If either temperature exceeds **95 °C**, the watchdog immediately kills the
+trainer and workers on detection and writes a `PAUSE` marker. It does not wait
+for a batch or save a new checkpoint; the last saved checkpoint remains the
+recovery point. Sensor commands have a two-second timeout, so detection is
+subject to polling and sensor latency. Thermal events are written to
+`train.log`. These protections apply to newly started or resumed training;
+an already-running trainer must be restarted to load them.
+
+From the repository root, request an immediate clean pause for every active
+VisualPhoneme trainer:
+
+```bash
+./pause-training
+```
+
+The command discovers each trainer's `--output-dir`, creates its persistent
+`PAUSE` marker, and sends the handled interrupt signal so the main process
+wakes promptly. Training finishes its current batch, writes `resume.pt`, and
+exits. An explicit `./pause-training OUTPUT_DIR` creates a marker even when the
+trainer is not currently visible. Remove that marker before resuming.
+
+Resume from the repository root without reconstructing the original command:
+
+```bash
+./resume-training OUTPUT_DIR
+```
+
+The command validates `metrics.json` and `resume.pt`, refuses to duplicate an
+active run, removes `OUTPUT_DIR/PAUSE`, reconstructs the recorded arguments,
+adds `--resume-state`, and launches a detached user service. The resumed job
+therefore survives terminal and Wi-Fi disconnections. A reboot still stops it,
+but the latest `resume.pt` remains usable.
 
 Predict from a video using the best saved checkpoint:
 

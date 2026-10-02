@@ -16,13 +16,16 @@ from torch.utils.data import DataLoader
 from VisualPhoneme.data import (
     GridClips, PHONEMES, collate_clips, collate_fusion_clips,
     collate_landmark_clips, ctc_prefix_beam_search, fit_bigram_log_probs,
+    fit_trigram_log_probs,
     greedy_decode, landmark_feature_dimensions, phoneme_target,
 )
 from VisualPhoneme.lrs3_data import Lrs3Clips
 from VisualPhoneme.model import (
-    CompactFusionVisualPhoneme, CompactGatedFusionVisualPhoneme,
+    AutoAvsrFusionVisualPhoneme, CompactFusionVisualPhoneme,
+    CompactGatedFusionVisualPhoneme,
     CompactLandmarkPhoneme, CompactTongueGatedFusionVisualPhoneme,
-    CompactVisualPhoneme, LargeGatedFusionVisualPhoneme,
+    CompactVisualPhoneme, LargeGatedFusionVisualPhoneme, LargeVisualPhoneme,
+    LargeTransformerFusionVisualPhoneme,
 )
 from VisualPhoneme.train import edit_totals, upsample_ctc_logits
 from VisualPhoneme.visemes import (PHONE_TO_VISUAL_GROUP, VISUAL_GROUPS,
@@ -50,19 +53,24 @@ def configure_logging(path: Path) -> None:
 
 def load_model(checkpoint: dict, device: torch.device):
     architecture = checkpoint.get("architecture", "image")
-    classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
+    classes = {"image": CompactVisualPhoneme, "large-image": LargeVisualPhoneme,
+               "coordinates": CompactLandmarkPhoneme,
                "fusion": CompactFusionVisualPhoneme,
                "gated-fusion": CompactGatedFusionVisualPhoneme,
                "tongue-gated-fusion": CompactTongueGatedFusionVisualPhoneme,
-               "large-gated-fusion": LargeGatedFusionVisualPhoneme}
+               "large-gated-fusion": LargeGatedFusionVisualPhoneme,
+               "large-transformer-fusion": LargeTransformerFusionVisualPhoneme,
+               "autoavsr-fusion": AutoAvsrFusionVisualPhoneme}
     arguments = {"classes": len(checkpoint["phones"]) + 1}
-    if architecture != "image":
+    if architecture not in {"image", "large-image"}:
         arguments.update({"landmark_points": int(checkpoint["landmark_points"]),
                           "coordinate_dimensions": int(checkpoint.get("coordinate_dimensions", 2))})
     if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion",
-                         "large-gated-fusion"}:
+                         "large-gated-fusion", "large-transformer-fusion",
+                         "autoavsr-fusion"}:
         arguments["landmark_bottleneck"] = checkpoint.get("landmark_bottleneck")
-    if architecture in {"gated-fusion", "tongue-gated-fusion", "large-gated-fusion"}:
+    if architecture in {"gated-fusion", "tongue-gated-fusion", "large-gated-fusion",
+                        "large-transformer-fusion", "autoavsr-fusion"}:
         arguments["image_gate_probability"] = checkpoint.get(
             "image_gate_initial_probability", 0.002472623
         )
@@ -76,19 +84,21 @@ def load_model(checkpoint: dict, device: torch.device):
     return architecture, model
 
 
-def training_bigram(data_root: Path, smoothing: float, dataset: str,
-                    target_inventory: str) -> torch.Tensor:
+def training_language_model(data_root: Path, smoothing: float, dataset: str,
+                            target_inventory: str, order: int) -> torch.Tensor:
     if dataset == "lrs3":
         rows = [json.loads(line) for line in
                 (data_root / "manifests/train.jsonl").read_text().splitlines()]
         if target_inventory == "visual-groups":
             sequences = [tuple(VISUAL_GROUP_TO_ID[PHONE_TO_VISUAL_GROUP[phone]]
                                for phone in row["phonemes"]) for row in rows]
-            return fit_bigram_log_probs(sequences, len(VISUAL_GROUPS) + 1, smoothing)
+            fit = fit_bigram_log_probs if order == 2 else fit_trigram_log_probs
+            return fit(sequences, len(VISUAL_GROUPS) + 1, smoothing)
         phone_to_id = {phone: index + 1 for index, phone in enumerate(PHONEMES)}
         sequences = [tuple(phone_to_id[phone] for phone in row["phonemes"])
                      for row in rows]
-        return fit_bigram_log_probs(sequences, len(PHONEMES) + 1, smoothing)
+        fit = fit_bigram_log_probs if order == 2 else fit_trigram_log_probs
+        return fit(sequences, len(PHONEMES) + 1, smoothing)
     rows = [json.loads(line) for line in (data_root / "clips.jsonl").read_text().splitlines()]
     sequences = []
     for row in rows:
@@ -98,7 +108,8 @@ def training_bigram(data_root: Path, smoothing: float, dataset: str,
         alignment = (data_root / "landmark-experiment" / "aligned"
                      / f"s{row['speaker_id']}" / f"{stem}.json")
         sequences.append(phoneme_target(str(alignment)))
-    return fit_bigram_log_probs(sequences, len(PHONEMES) + 1, smoothing)
+    fit = fit_bigram_log_probs if order == 2 else fit_trigram_log_probs
+    return fit(sequences, len(PHONEMES) + 1, smoothing)
 
 
 def main() -> None:
@@ -112,6 +123,9 @@ def main() -> None:
     parser.add_argument("--n-values", default="1,3,5,10,20")
     parser.add_argument("--lm-weights", default="0")
     parser.add_argument("--lm-smoothing", type=float, default=1.0)
+    parser.add_argument("--lm-order", type=int, choices=(2, 3), default=2)
+    parser.add_argument("--token-bonuses", default="0",
+                        help="comma-separated score added whenever a token is emitted")
     parser.add_argument("--beam-width", type=int, default=64)
     parser.add_argument("--beam-token-top-k", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -119,12 +133,19 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--frame-cache-dir", type=Path)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument(
+        "--ablate-modality", choices=("none", "image", "coordinates"), default="none",
+        help="zero one fusion input at evaluation time without retraining",
+    )
     args = parser.parse_args()
     n_values = sorted({int(value) for value in args.n_values.split(",")})
     lm_weights = [float(value) for value in args.lm_weights.split(",")]
+    token_bonuses = [float(value) for value in args.token_bonuses.split(",")]
     if (not args.checkpoint.is_file() or not n_values or n_values[0] < 1
             or args.beam_width < n_values[-1] or args.beam_token_top_k < 1
-            or any(weight < 0 for weight in lm_weights) or args.lm_smoothing <= 0):
+            or any(weight < 0 for weight in lm_weights) or args.lm_smoothing <= 0
+            or not token_bonuses or any(not torch.isfinite(torch.tensor(value))
+                                        for value in token_bonuses)):
         parser.error("invalid checkpoint, N values, beam, or language-model setting")
     if args.hypotheses_output and (args.dataset == "grid" or len(lm_weights) != 1):
         parser.error("hypothesis export requires LRS3 and exactly one LM weight")
@@ -139,14 +160,22 @@ def main() -> None:
     if labels != expected_labels:
         raise ValueError("checkpoint target vocabulary does not match this code")
     architecture, model = load_model(checkpoint, device)
+    fusion_architectures = {
+        "fusion", "gated-fusion", "tongue-gated-fusion", "large-gated-fusion",
+        "large-transformer-fusion", "autoavsr-fusion"
+    }
+    if args.ablate_modality != "none" and architecture not in fusion_architectures:
+        parser.error("modality ablation requires a fusion checkpoint")
     coordinate_mode = checkpoint.get("coordinate_mode", "eye-normalized")
     coordinate_features = checkpoint.get("coordinate_features", "position")
-    if landmark_feature_dimensions(coordinate_features) != int(
-            checkpoint.get("coordinate_dimensions", 2)):
+    include_landmarks = architecture not in {"image", "large-image"}
+    if (include_landmarks
+            and landmark_feature_dimensions(coordinate_features) != int(
+                checkpoint.get("coordinate_dimensions", 2))):
         raise ValueError("checkpoint coordinate dimensions are inconsistent")
-    include_landmarks = architecture != "image"
-    include_video = architecture in {"image", "fusion", "gated-fusion",
-                                     "tongue-gated-fusion", "large-gated-fusion"}
+    include_video = architecture in {"image", "large-image", "fusion", "gated-fusion",
+                                     "tongue-gated-fusion", "large-gated-fusion",
+                                     "large-transformer-fusion", "autoavsr-fusion"}
     dataset_name = checkpoint.get("dataset", "grid") if args.dataset == "auto" else args.dataset
     dataset_class = GridClips if dataset_name == "grid" else Lrs3Clips
     validation = dataset_class(
@@ -154,10 +183,13 @@ def main() -> None:
         args.validation_limit, False, include_landmarks, include_video, False, coordinate_mode,
         args.frame_cache_dir, coordinate_features,
     )
-    collate = {"image": collate_clips, "coordinates": collate_landmark_clips,
+    collate = {"image": collate_clips, "large-image": collate_clips,
+               "coordinates": collate_landmark_clips,
                "fusion": collate_fusion_clips, "gated-fusion": collate_fusion_clips,
                "tongue-gated-fusion": collate_fusion_clips,
-               "large-gated-fusion": collate_fusion_clips}
+               "large-gated-fusion": collate_fusion_clips,
+               "large-transformer-fusion": collate_fusion_clips,
+               "autoavsr-fusion": collate_fusion_clips}
     loader = DataLoader(validation, batch_size=args.batch_size, num_workers=args.workers,
                         collate_fn=collate[architecture], pin_memory=device.type == "cuda",
                         persistent_workers=args.workers > 0)
@@ -167,8 +199,14 @@ def main() -> None:
     with torch.inference_mode():
         for batch_index, batch in enumerate(loader, 1):
             if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                                "large-gated-fusion"}:
+                                "large-gated-fusion", "large-transformer-fusion",
+                                "autoavsr-fusion"}:
                 video, landmarks, mask, targets, lengths, target_lengths, clip_ids = batch
+                if args.ablate_modality == "image":
+                    video.zero_()
+                elif args.ablate_modality == "coordinates":
+                    landmarks.zero_()
+                    mask.zero_()
                 logits = model(video.to(device), landmarks.to(device), mask.to(device))
             elif architecture == "coordinates":
                 landmarks, mask, targets, lengths, target_lengths, clip_ids = batch
@@ -204,8 +242,9 @@ def main() -> None:
                                 log_probabilities[index, :int(output_lengths[index])]))
             if batch_index % 10 == 0:
                 LOGGER.info("encoded clips=%d/%d", len(records), len(validation))
-    transitions = training_bigram(args.data_root, args.lm_smoothing, dataset_name,
-                                  target_inventory)
+    transitions = training_language_model(
+        args.data_root, args.lm_smoothing, dataset_name, target_inventory, args.lm_order
+    )
     results = []
     hypothesis_output = None
     if args.hypotheses_output:
@@ -214,13 +253,14 @@ def main() -> None:
         args.hypotheses_output.parent.mkdir(parents=True, exist_ok=True)
         hypothesis_output = args.hypotheses_output.open("w", buffering=1)
         rows_by_id = {row["clip_id"]: row for row in validation.rows}
-    for lm_weight in lm_weights:
+    settings = ((weight, bonus) for weight in lm_weights for bonus in token_bonuses)
+    for lm_weight, token_bonus in settings:
         totals = {n: {"errors": 0, "group_errors": 0, "hits": 0}
                   for n in n_values}
         for index, (clip_id, reference, scores) in enumerate(records, 1):
             candidates = ctc_prefix_beam_search(
                 scores, args.beam_width, n_values[-1], args.beam_token_top_k,
-                transitions if lm_weight else None, lm_weight,
+                transitions if lm_weight else None, lm_weight, token_bonus,
             )
             sequences = [sequence for sequence, _ in candidates]
             reference_groups = (reference if target_inventory == "visual-groups" else
@@ -259,26 +299,29 @@ def main() -> None:
                     for sequence in subset
                 )
             if index % 500 == 0:
-                LOGGER.info("decoded lm_weight=%.3f clips=%d/%d", lm_weight, index,
-                            len(records))
+                LOGGER.info("decoded lm_weight=%.3f token_bonus=%.3f clips=%d/%d",
+                            lm_weight, token_bonus, index, len(records))
         curve = [{"n": n, "oracle_per": totals[n]["errors"] / phones,
                   "oracle_group_per": totals[n]["group_errors"] / phones,
                   "exact_hits": totals[n]["hits"],
                   "exact_accuracy": totals[n]["hits"] / len(records)} for n in n_values]
-        results.append({"lm_weight": lm_weight, "curve": curve})
+        results.append({"lm_weight": lm_weight, "token_bonus": token_bonus,
+                        "curve": curve})
     if hypothesis_output is not None:
         hypothesis_output.close()
     report = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "checkpoint": str(args.checkpoint.resolve()), "checkpoint_epoch": checkpoint["epoch"],
         "architecture": architecture, "coordinate_mode": coordinate_mode,
+        "ablated_modality": args.ablate_modality,
         "dataset": dataset_name,
         "target_inventory": target_inventory,
         "coordinate_features": coordinate_features, "validation_clips": len(records),
         "validation_phones": phones, "greedy_per": greedy_errors / phones,
         "greedy_group_per": greedy_group_errors / phones,
         "beam_width": args.beam_width, "beam_token_top_k": args.beam_token_top_k,
-        "lm_smoothing": args.lm_smoothing, "results": results,
+        "lm_smoothing": args.lm_smoothing, "lm_order": args.lm_order,
+        "results": results,
         "seconds": time.perf_counter() - started,
         "test_speakers_evaluated": False,
     }

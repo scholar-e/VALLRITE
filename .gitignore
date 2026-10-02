@@ -10,6 +10,7 @@ datasets/
 /train-00000-of-00002-6d235766a16b101a.parquet
 /train-00001-of-00002-a89b175a3b0aa629.parquet
 /LRS3_landmarks.zip
+/pretrain/
 logs/
 results_lora/
 qwen_phonemes_to_text_lora/

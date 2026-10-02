@@ -9,25 +9,66 @@ import torch
 
 from VisualPhoneme.data import (GridClips, collate_aligned_landmark_clips,
                                       ctc_prefix_beam_search,
-                                      fit_bigram_log_probs, greedy_decode,
+                                      fit_bigram_log_probs, fit_trigram_log_probs,
+                                      greedy_decode,
                                       load_video, normalize_phone, phoneme_target,
                                       transform_landmarks)
-from VisualPhoneme.model import (CompactFusionVisualPhoneme,
+from VisualPhoneme.model import (AutoAvsrFusionVisualPhoneme,
+                                       CompactFusionVisualPhoneme,
                                        CompactGatedFusionVisualPhoneme,
                                        CompactLandmarkPhoneme,
                                        CompactTongueGatedFusionVisualPhoneme,
                                        CompactVisualPhoneme,
-                                       LargeGatedFusionVisualPhoneme)
+                                       LargeGatedFusionVisualPhoneme,
+                                       LargeVisualPhoneme,
+                                       LargeTransformerFusionVisualPhoneme)
 from VisualPhoneme.lrs3_data import (LRS3_LANDMARK_POINTS, Lrs3Clips,
-                                     eye_normalize_lrs3, load_lrs3_landmarks)
+                                     eye_normalize_lrs3, frontalize_lrs3,
+                                     load_lrs3_landmarks)
 from VisualPhoneme.train import edit_totals, upsample_ctc_logits
 from VisualPhoneme.visemes import (PHONE_TO_VISUAL_GROUP, VISUAL_PHONE_GROUPS,
                                    PHONE_ID_TO_VISUAL_GROUP_ID, VISUAL_GROUPS,
+                                   REST_PHONE_ID,
                                    visual_group_alternatives,
                                    visual_phone_alternatives)
 
 
 class VisualPhonemeTests(unittest.TestCase):
+    def test_lrs3_frontalization_preserves_missing_frames(self):
+        generator = torch.Generator().manual_seed(7)
+        points = torch.randn(4, 68, 2, generator=generator)
+        points[:, :, 0] += torch.linspace(-1, 1, 68)
+        points[2] = float("nan")
+        frontal = frontalize_lrs3(points)
+        self.assertTrue(torch.isnan(frontal[2]).all())
+        self.assertTrue(torch.isfinite(frontal[[0, 1, 3]]).all())
+
+    def test_autoavsr_fusion_forward(self):
+        model = AutoAvsrFusionVisualPhoneme(
+            classes=18, landmark_points=68, coordinate_dimensions=10,
+            landmark_bottleneck=128,
+        ).eval()
+        with torch.inference_mode():
+            logits = model(
+                torch.randn(1, 3, 1, 96, 96),
+                torch.randn(1, 3, 68, 10),
+                torch.ones(1, 3, dtype=torch.bool),
+            )
+        self.assertEqual(tuple(logits.shape), (3, 1, 18))
+
+    def test_large_transformer_fusion_forward(self):
+        model = LargeTransformerFusionVisualPhoneme(
+            classes=18, landmark_points=68, coordinate_dimensions=10,
+            landmark_bottleneck=128,
+        )
+        logits = model(
+            torch.randn(2, 3, 1, 96, 96),
+            torch.randn(2, 3, 68, 10),
+            torch.ones(2, 3, dtype=torch.bool),
+        )
+        self.assertEqual(tuple(logits.shape), (3, 2, 18))
+        self.assertLess(model.parameter_count, 12_000_000)
+
     def test_lrs3_landmarks_preserve_missing_frames_and_normalize(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "landmarks.pkl"
@@ -100,6 +141,24 @@ class VisualPhonemeTests(unittest.TestCase):
             self.assertEqual(len(dataset.rows[0]["frame_phone_ids"]),
                              dataset.rows[0]["frames"])
 
+    def test_lrs3_rest_requires_transcript_boundary_and_audio_gap(self):
+        row = {"clip_id": "clip", "frames": 30, "fps": 25, "transcript": "a bee"}
+        document = {
+            "provenance": {"teacher_transcripts": [["a", "bee"]]},
+            "tiers": {
+                "words": {"entries": [[0.0, 0.3, "a"], [0.5, 1.0, "bee"]]},
+                "phones": {"entries": [[0.0, 0.3, "AH"], [0.5, 0.7, "B"],
+                                              [0.7, 1.0, "IY"]]},
+            },
+        }
+        from VisualPhoneme.lrs3_data import _teacher_chunks
+        chunks = _teacher_chunks(row, document, 20, 1.0, True, 0.08)
+        self.assertEqual(chunks[0]["target_ids"],
+                         [3, REST_PHONE_ID, 7, 18])
+        self.assertIn(REST_PHONE_ID, chunks[0]["frame_phone_ids"])
+        no_rest = _teacher_chunks(row, document, 20, 1.0, True, 0.25)
+        self.assertNotIn(REST_PHONE_ID, no_rest[0]["target_ids"])
+
     def test_model_preserves_time_and_is_small(self):
         model = CompactVisualPhoneme()
         output = model(torch.zeros(2, 9, 1, 64, 64))
@@ -152,6 +211,21 @@ class VisualPhonemeTests(unittest.TestCase):
         self.assertGreater(model.parameter_count, 9_000_000)
         self.assertLess(model.parameter_count, 11_000_000)
 
+    def test_large_image_pretraining_path_matches_large_fusion(self):
+        image = LargeVisualPhoneme(classes=18)
+        fusion = LargeGatedFusionVisualPhoneme(
+            classes=18, landmark_points=68, coordinate_dimensions=10,
+        )
+        output = image(torch.zeros(1, 4, 1, 64, 64))
+        self.assertEqual(output.shape, (4, 1, 18))
+        for prefix in ("frame_encoder.", "image_projection."):
+            source = {name: value for name, value in image.state_dict().items()
+                      if name.startswith(prefix)}
+            target = fusion.state_dict()
+            self.assertTrue(source)
+            self.assertTrue(all(name in target and target[name].shape == value.shape
+                                for name, value in source.items()))
+
     def test_visual_groups_partition_phones_and_expand_all_members(self):
         from VisualPhoneme.data import PHONEMES
         members = [phone for group in VISUAL_PHONE_GROUPS.values() for phone in group]
@@ -195,6 +269,25 @@ class VisualPhonemeTests(unittest.TestCase):
         self.assertEqual(transitions.shape, (3, 3))
         self.assertTrue(torch.isfinite(transitions[:, 1:]).all())
         self.assertGreater(transitions[1, 2], transitions[1, 1])
+
+    def test_trigram_model_uses_two_token_history(self):
+        transitions = fit_trigram_log_probs(
+            [[1, 2, 1], [1, 2, 1], [2, 2, 2]], 3
+        )
+        self.assertEqual(transitions.shape, (3, 3, 3))
+        self.assertTrue(torch.isfinite(transitions[:, :, 1:]).all())
+        self.assertGreater(transitions[1, 2, 1], transitions[1, 2, 2])
+
+    def test_ctc_prefix_beam_accepts_trigram_and_token_bonus(self):
+        logits = torch.tensor([[0.0, 5.0, 0.0],
+                               [5.0, 0.0, 0.0],
+                               [0.0, 0.0, 5.0]])
+        transitions = fit_trigram_log_probs([[1, 2], [1, 2]], 3)
+        candidates = ctc_prefix_beam_search(
+            logits.log_softmax(-1), beam_width=6, top_n=3,
+            transition_log_probs=transitions, lm_weight=0.2, token_bonus=0.1,
+        )
+        self.assertEqual(candidates[0][0], [1, 2])
 
     def test_coordinate_modes_are_validated(self):
         with self.assertRaisesRegex(ValueError, "invalid coordinate mode"):

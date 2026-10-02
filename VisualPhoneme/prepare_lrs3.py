@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import sys
 
+import cv2
 import numpy as np
 import pyarrow.parquet as pq
 import pronouncing
@@ -66,9 +67,113 @@ def read_transcript(path: Path) -> str:
     raise ValueError(f"missing Text field: {path}")
 
 
+def read_timed_words(path: Path) -> list[tuple[str, float, float]]:
+    """Read the word timing table included with an LRS3 pretrain clip."""
+    words = []
+    in_table = False
+    for line in path.read_text(errors="replace").splitlines():
+        if line.strip().upper() == "WORD START END ASDSCORE":
+            in_table = True
+            continue
+        if not in_table or not line.strip():
+            continue
+        fields = line.split()
+        if len(fields) < 3:
+            continue
+        try:
+            words.append((fields[0], float(fields[1]), float(fields[2])))
+        except ValueError:
+            continue
+    return words
+
+
+def pretrain_chunks(video: Path, root: Path, max_phones: int,
+                    max_seconds: float = 6.0, max_gap: float = 0.5) -> list[dict]:
+    """Split one long pretrain recording at supplied word boundaries."""
+    capture = cv2.VideoCapture(str(video))
+    try:
+        source_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = float(capture.get(cv2.CAP_PROP_FPS)) or 25.0
+    finally:
+        capture.release()
+    if source_frames <= 0:
+        raise OSError(f"cannot read frame count: {video}")
+    groups = []
+    unknown_words = []
+    for word, start, end in read_timed_words(video.with_suffix(".txt")):
+        normalized = normalize_word(word)
+        phones = [strip_stress(phone) for phone in cmudict_pronunciation(normalized)]
+        phones = [phone for phone in phones if phone in PHONE_TO_ID]
+        if phones:
+            groups.append((normalized, start, end, phones))
+        else:
+            unknown_words.append(normalized)
+    packed = []
+    current = []
+    current_phones = 0
+    for group in groups:
+        exceeds_phones = current_phones + len(group[3]) > max_phones
+        exceeds_span = bool(current and group[2] - current[0][1] > max_seconds)
+        crosses_gap = bool(current and group[1] - current[-1][2] > max_gap)
+        if current and (exceeds_phones or exceeds_span or crosses_gap):
+            packed.append(current)
+            current = []
+            current_phones = 0
+        current.append(group)
+        current_phones += len(group[3])
+    if current:
+        packed.append(current)
+    relative = video.relative_to(root)
+    relative_id = relative.with_suffix("").as_posix()
+    rows = []
+    for index, chunk in enumerate(packed):
+        frame_start = max(0, int(np.floor((chunk[0][1] - 0.04) * fps)))
+        frame_end = min(source_frames, int(np.ceil((chunk[-1][2] + 0.04) * fps)))
+        phones = [phone for group in chunk for phone in group[3]]
+        rows.append({
+            "clip_id": f"lrs3:{relative_id}@{frame_start}:{frame_end}",
+            "source_clip_id": f"lrs3:{relative_id}",
+            "dataset": "LRS3", "split": "train", "source_type": "video",
+            "video": str(relative), "landmarks": None,
+            "frame_start": frame_start, "frame_end": frame_end,
+            "frames": frame_end - frame_start, "fps": fps,
+            "transcript": " ".join(group[0] for group in chunk),
+            "phonemes": phones, "pronunciation_coverage": 1.0,
+            "unknown_words": unknown_words,
+            "label_source": "LRS3 pretrain word timings + CMUdict first pronunciation",
+            "pretrain_chunk_index": index,
+        })
+    return rows
+
+
+def prepare_pretrain(root: Path, max_phones: int) -> list[dict]:
+    source = root / "raw" / "pretrain"
+    videos = sorted(source.glob("*/*.mp4"))
+    if not videos:
+        raise FileNotFoundError(f"missing extracted LRS3 pretrain videos: {source}")
+    rows = []
+    failures = 0
+    for index, video in enumerate(videos, 1):
+        try:
+            rows.extend(pretrain_chunks(video, root, max_phones))
+        except (OSError, ValueError) as error:
+            failures += 1
+            LOGGER.warning("skipping pretrain clip %s: %s", video, error)
+        if index % 5000 == 0:
+            LOGGER.info("indexed pretrain videos=%d/%d chunks=%d failures=%d",
+                        index, len(videos), len(rows), failures)
+    LOGGER.info("indexed pretrain videos=%d chunks=%d failures=%d",
+                len(videos), len(rows), failures)
+    return rows
+
+
 def write_jsonl(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows))
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
 def prepare_trainval(root: Path, validation_ids: set[str]) -> tuple[list[dict], list[dict]]:
@@ -132,15 +237,30 @@ def prepare_test(root: Path) -> list[dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path("datasets/lrs3"))
+    parser.add_argument("--include-pretrain", action="store_true")
+    parser.add_argument("--pretrain-max-phones", type=int, default=16)
     args = parser.parse_args()
+    if args.pretrain_max_phones < 1:
+        parser.error("--pretrain-max-phones must be positive")
     configure_logging(args.root / "prepare.log")
     validation_path = args.root / "manifests" / "lrs3-valid.id"
     validation_ids = set(validation_path.read_text().splitlines())
     if len(validation_ids) != 1200:
         raise ValueError(f"expected 1,200 AV-HuBERT validation IDs: {validation_path}")
-    train, validation = prepare_trainval(args.root, validation_ids)
-    test = prepare_test(args.root)
     manifests = args.root / "manifests"
+    existing = all((manifests / f"{split}.jsonl").is_file()
+                   for split in ("train", "validation", "test"))
+    if args.include_pretrain and existing:
+        train = [row for row in read_jsonl(manifests / "train.jsonl")
+                 if "/pretrain/" not in f"/{row['video']}" ]
+        validation = read_jsonl(manifests / "validation.jsonl")
+        test = read_jsonl(manifests / "test.jsonl")
+        LOGGER.info("reusing prepared trainval/validation/test manifests")
+    else:
+        train, validation = prepare_trainval(args.root, validation_ids)
+        test = prepare_test(args.root)
+    pretrain = prepare_pretrain(args.root, args.pretrain_max_phones) if args.include_pretrain else []
+    train = pretrain + train
     write_jsonl(manifests / "train.jsonl", train)
     write_jsonl(manifests / "validation.jsonl", validation)
     write_jsonl(manifests / "test.jsonl", test)
@@ -162,6 +282,7 @@ def main() -> None:
         },
         "rows_with_unknown_words": sum(bool(row["unknown_words"]) for row in all_rows),
         "validation_protocol": "official AV-HuBERT 1,200-ID validation list",
+        "pretrain_chunks": len(pretrain),
         "test_landmarks_joined": False,
         "test_landmark_note": (
             "The supplied test parquet retains only numeric idx; no verified mapping to "
