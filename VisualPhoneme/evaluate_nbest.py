@@ -116,6 +116,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--dataset", choices=("auto", "grid", "lrs3"), default="auto")
+    parser.add_argument("--split", choices=("train", "validation"), default="validation",
+                        help="dataset split to evaluate/export; test is intentionally unavailable")
     parser.add_argument("--data-root", type=Path, default=Path("datasets/grid-pilot"))
     parser.add_argument("--output", type=Path)
     parser.add_argument("--hypotheses-output", type=Path,
@@ -130,6 +132,8 @@ def main() -> None:
     parser.add_argument("--beam-token-top-k", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--validation-limit", type=int)
+    parser.add_argument("--limit", type=int,
+                        help="maximum records from the selected split (preferred alias)")
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--frame-cache-dir", type=Path)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
@@ -138,6 +142,9 @@ def main() -> None:
         help="zero one fusion input at evaluation time without retraining",
     )
     args = parser.parse_args()
+    if args.limit is not None and args.validation_limit is not None:
+        parser.error("use either --limit or --validation-limit, not both")
+    selected_limit = args.limit if args.limit is not None else args.validation_limit
     n_values = sorted({int(value) for value in args.n_values.split(",")})
     lm_weights = [float(value) for value in args.lm_weights.split(",")]
     token_bonuses = [float(value) for value in args.token_bonuses.split(",")]
@@ -178,9 +185,9 @@ def main() -> None:
                                      "large-transformer-fusion", "autoavsr-fusion"}
     dataset_name = checkpoint.get("dataset", "grid") if args.dataset == "auto" else args.dataset
     dataset_class = GridClips if dataset_name == "grid" else Lrs3Clips
-    validation = dataset_class(
-        args.data_root, "validation", int(checkpoint["image_size"]), checkpoint["crop"],
-        args.validation_limit, False, include_landmarks, include_video, False, coordinate_mode,
+    selected_data = dataset_class(
+        args.data_root, args.split, int(checkpoint["image_size"]), checkpoint["crop"],
+        selected_limit, False, include_landmarks, include_video, False, coordinate_mode,
         args.frame_cache_dir, coordinate_features,
     )
     collate = {"image": collate_clips, "large-image": collate_clips,
@@ -190,7 +197,7 @@ def main() -> None:
                "large-gated-fusion": collate_fusion_clips,
                "large-transformer-fusion": collate_fusion_clips,
                "autoavsr-fusion": collate_fusion_clips}
-    loader = DataLoader(validation, batch_size=args.batch_size, num_workers=args.workers,
+    loader = DataLoader(selected_data, batch_size=args.batch_size, num_workers=args.workers,
                         collate_fn=collate[architecture], pin_memory=device.type == "cuda",
                         persistent_workers=args.workers > 0)
     records = []
@@ -241,7 +248,7 @@ def main() -> None:
                 records.append((clip_ids[index], reference,
                                 log_probabilities[index, :int(output_lengths[index])]))
             if batch_index % 10 == 0:
-                LOGGER.info("encoded clips=%d/%d", len(records), len(validation))
+                LOGGER.info("encoded clips=%d/%d", len(records), len(selected_data))
     transitions = training_language_model(
         args.data_root, args.lm_smoothing, dataset_name, target_inventory, args.lm_order
     )
@@ -252,7 +259,7 @@ def main() -> None:
             parser.error("hypothesis export is currently supported only for LRS3")
         args.hypotheses_output.parent.mkdir(parents=True, exist_ok=True)
         hypothesis_output = args.hypotheses_output.open("w", buffering=1)
-        rows_by_id = {row["clip_id"]: row for row in validation.rows}
+        rows_by_id = {row["clip_id"]: row for row in selected_data.rows}
     settings = ((weight, bonus) for weight in lm_weights for bonus in token_bonuses)
     for lm_weight, token_bonus in settings:
         totals = {n: {"errors": 0, "group_errors": 0, "hits": 0}
@@ -316,8 +323,12 @@ def main() -> None:
         "ablated_modality": args.ablate_modality,
         "dataset": dataset_name,
         "target_inventory": target_inventory,
-        "coordinate_features": coordinate_features, "validation_clips": len(records),
-        "validation_phones": phones, "greedy_per": greedy_errors / phones,
+        "coordinate_features": coordinate_features, "split": args.split,
+        "clips": len(records), "phones": phones,
+        # Retain legacy keys so existing report readers continue to work.
+        "validation_clips": len(records) if args.split == "validation" else None,
+        "validation_phones": phones if args.split == "validation" else None,
+        "greedy_per": greedy_errors / phones,
         "greedy_group_per": greedy_group_errors / phones,
         "beam_width": args.beam_width, "beam_token_top_k": args.beam_token_top_k,
         "lm_smoothing": args.lm_smoothing, "lm_order": args.lm_order,

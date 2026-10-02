@@ -4,10 +4,9 @@ VALLRITE is an experimental visual speech-recognition system based on
 [VALLR](https://github.com/MarshallT-99/VALLR). It converts silent face video
 into phonetic evidence and then into text.
 
-The main change is to preserve uncertainty. Sounds such as `/p/`, `/b/`, and
-`/m/` can look nearly identical on the lips, so VALLRITE is designed to pass a
-ranked phoneme lattice—not one prematurely selected phoneme string—into a
-probabilistic lexical and language decoder.
+VALLRITE preserves uncertainty in the visual predictions. Sounds such as
+`/p/`, `/b/`, and `/m/` can look nearly identical on the lips, so the pipeline
+retains ranked per-step phoneme probabilities for downstream decoding.
 
 ```text
                                       training only
@@ -22,6 +21,8 @@ camera-observable articulation, confidence, and compatible IPA/ARPAbet
 phonemes. It complements phonetic alphabets rather than claiming that voicing,
 nasality, or hidden tongue positions are visible.
 
+See the [VPA specification](VisualPhoneticAlphabet/README.md) for details.
+
 ## Status
 
 - The published VALLR visual checkpoint loads and runs on CPU.
@@ -30,12 +31,6 @@ nasality, or hidden tongue positions are visible.
 - A real AVSpeech clip has passed end-to-end inference.
 - Full AVSpeech train/test manifests are stored locally: 2,805,118 segments.
 - A reusable CMUdict LoRA trainer and an initial 1,024-entry adapter are present.
-- Proper CTC lattice decoding, VPA extraction, audio-teacher labels, WFST
-  decoding, evaluation, and mobile export remain planned work.
-
-The current Qwen output is not accurate: the base model has not yet been
-fine-tuned on real VALLR lattices. A successful execution is presently a smoke
-test, not an accuracy result.
 
 ## Run
 
@@ -70,21 +65,6 @@ Dataset media and model checkpoints are local and ignored by Git. AVSpeech
 manifests reference YouTube sources, so removed, private, and restricted videos
 are skipped and recorded in `index.jsonl`.
 
-## Project plan
-
-The implementation is organized around six workstreams:
-
-1. Reproduce and measure the original VALLR baseline.
-2. Build proper CTC beam/lattice decoding with calibrated probabilities.
-3. Develop and validate the Visual Phonetic Alphabet.
-4. Improve training labels with synchronized audio and scale permitted data.
-5. Compare WFST, compact neural, and Qwen-based language decoding.
-6. Distill, quantize, and benchmark the selected system on a phone.
-
-The complete engineering and research blueprint is in
-[ai-readme.md](ai-readme.md). The focused VPA specification is in
-[VisualPhoneticAlphabet/README.md](VisualPhoneticAlphabet/README.md).
-
 ## Repository layout
 
 ```text
@@ -98,7 +78,6 @@ VALLRITE/
 |- datasets/                   # local, ignored
 |- vallrite.py
 |- README.md
-|- ai-readme.md
 `- VALLR/                      # original upstream project
    |- Data/
    |- Models/
@@ -106,13 +85,6 @@ VALLRITE/
    |- face_cropper.py
    `- main.py
 ```
-
-## Success criteria
-
-VALLRITE must beat a reproduced VALLR baseline on the same held-out split,
-demonstrate that calibrated uncertainty improves WER over top-1 phonemes, show
-that audio teaching helps video-only inference, and run offline within measured
-memory and latency limits on a named reference phone.
 
 ## Attribution
 
