@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 PROMPT_VERSION = "visual-phone-nbest-to-words-1"
@@ -34,6 +35,13 @@ def load_nbest(path: Path) -> list[dict]:
         seen.add(clip_id)
         if not row["phone_hypotheses"] or not row["reference_words"]:
             raise ValueError(f"empty hypotheses or reference: {clip_id}")
+        for hypothesis in row["phone_hypotheses"]:
+            if not {"rank", "phones", "ctc_log_score"}.issubset(hypothesis):
+                raise ValueError(f"missing hypothesis fields: {clip_id}")
+            if (not isinstance(hypothesis["phones"], list)
+                    or not all(isinstance(phone, str) for phone in hypothesis["phones"])
+                    or not math.isfinite(float(hypothesis["ctc_log_score"]))):
+                raise ValueError(f"invalid phones or score: {clip_id}")
     if not rows:
         raise ValueError("N-best input is empty")
     return rows

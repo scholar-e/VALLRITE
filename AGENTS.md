@@ -26,3 +26,16 @@ tools/with-vpa-gpu .venv-vpa-gpu/bin/python -c \
 Keep training runs bounded with the program's `--max-minutes` option when the
 user provides a time budget. GPU visibility and library loading are separate:
 the launcher fixes libraries, while host/elevated execution exposes the device.
+
+## Stay with training through evaluation
+
+User preference: after launching an authorized training experiment, remain in
+the active turn until training and its planned evaluation finish, unless the
+user asks for background-only execution or a genuine blocker requires input.
+Use the short-wait skill and its script for detached jobs:
+`bash /home/elinzi/.codex/skills/short-wait/scripts/wait.sh --seconds 55 --file PATH`.
+Choose the run's completion marker or process/log trigger; use built-in blocking
+waits for existing exec sessions. Keep individual waits under 60 seconds and
+provide concise progress updates. Inspect final logs and metrics before reporting
+success. A stopped process or expired training cap is not proof of completion.
+Do not start additional experiments without authorization.

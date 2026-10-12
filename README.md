@@ -23,6 +23,11 @@ nasality, or hidden tongue positions are visible.
 
 See the [VPA specification](VisualPhoneticAlphabet/README.md) for details.
 
+Phoneme-to-word model development lives in
+[CompetitiveWordDecoder](CompetitiveWordDecoder/README.md), including noisy
+phoneme training, teacher models, distillation, and WER evaluation. The existing
+lexical decoder and shared utilities are in [PhonemeDecoder](PhonemeDecoder/README.md).
+
 ## Status
 
 - The published VALLR visual checkpoint loads and runs on CPU.

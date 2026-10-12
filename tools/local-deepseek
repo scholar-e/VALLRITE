@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+  echo 'Usage: bash tools/local-deepseek TASK_FILE [read-only|workspace-write]' >&2
+  exit 2
+fi
+task_file=$(realpath -- "$1")
+mode=${2:-read-only}
+case "$mode" in
+  read-only|workspace-write) ;;
+  *) echo 'Mode must be read-only or workspace-write' >&2; exit 2 ;;
+esac
+repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+client=/home/elinzi/.codex/skills/local-deepseek-worker/scripts/delegate.sh
+if [[ ! -f "$task_file" || ! -f "$client" ]]; then
+  echo 'Task file or local DeepSeek client is missing' >&2
+  exit 1
+fi
+exec bash "$client" "$repository_root" "$mode" "$task_file"

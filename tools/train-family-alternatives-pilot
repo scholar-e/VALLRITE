@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/elinzi/Coding/VALLRITE
+run_dir=checkpoints/vallr-alternatives-20261012
+tools/with-vpa-gpu .venv-qwen/bin/python -m CompetitiveWordDecoder.train_vallr_clean \
+  --output "$run_dir" --end-of-answer \
+  --initial-adapter checkpoints/vallr-eos-20261010/adapter \
+  --visual-families --family-format alternatives --max-length 768 \
+  --family-reference datasets/decoder-training/lrs3-full-forced-direct-validation/phone-hypotheses.jsonl \
+  --epochs 1 --learning-rate 2e-5 --batch-size 4 --gradient-accumulation 1 \
+  --max-minutes 30 --test-limit 25 "$@"
+# A time-capped partial epoch is evaluated as partial, never called a completed epoch.
+test -f "$run_dir/training-metrics.json"
+test ! -e "$run_dir/PAUSE"
+test ! -e PAUSE
+exec tools/with-vpa-gpu .venv-qwen/bin/python -m CompetitiveWordDecoder.evaluate_llama_visual \
+  --hypotheses datasets/decoder-training/lrs3-full-forced-direct-validation/phone-hypotheses.jsonl \
+  --adapter "$run_dir/adapter" --output checkpoints/vallr-reference-alternatives-20261012 \
+  --reference-phones --visual-families --family-format alternatives \
+  --max-prompt-tokens 768 --batch-size 8

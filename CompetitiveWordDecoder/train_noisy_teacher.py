@@ -8,8 +8,10 @@ import logging
 from pathlib import Path
 import random
 import sys
+import time
 
 from CompetitiveWordDecoder.noisy_teacher import PROMPT_VERSION, load_nbest, nbest_prompt
+from PhonemeDecoder.evaluate_qwen_direct import prompt as direct_prompt
 
 LOGGER = logging.getLogger("competitive_word_decoder.noisy_teacher_train")
 
@@ -31,8 +33,12 @@ def main() -> None:
     parser.add_argument("--hypotheses", type=Path, required=True)
     parser.add_argument("--model", type=Path, default=Path("checkpoints/Qwen3.5-2B"))
     parser.add_argument("--initial-adapter", type=Path)
+    parser.add_argument("--input-mode", choices=("nbest", "individual"), default="nbest",
+                        help="one combined N-best prompt or one row per noisy hypothesis")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-steps", type=int, default=1000)
+    parser.add_argument("--max-minutes", type=float,
+                        help="stop and save after this many minutes of training")
     parser.add_argument("--max-entries", type=int, default=5000)
     parser.add_argument("--max-length", type=int, default=512)
     parser.add_argument("--batch-size", type=int, default=4)
@@ -40,8 +46,11 @@ def main() -> None:
     parser.add_argument("--save-steps", type=int, default=100)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--pause-file", type=Path, default=Path("PAUSE"))
     parser.add_argument("--require-cuda", action="store_true")
     args = parser.parse_args()
+    if args.max_minutes is not None and args.max_minutes <= 0:
+        parser.error("max minutes must be positive")
     if not args.hypotheses.is_file() or not args.model.is_dir():
         parser.error("hypotheses and model must exist")
     if args.initial_adapter is not None and not args.initial_adapter.exists():
@@ -56,7 +65,8 @@ def main() -> None:
     rows = rows[:args.max_entries]
     manifest = {
         "format": "competitive-word-decoder-noisy-teacher-0.1",
-        "prompt_version": PROMPT_VERSION,
+        "prompt_version": (PROMPT_VERSION if args.input_mode == "nbest"
+                           else "direct-visual-noisy-hypothesis-1"),
         "objective": "target-only transcript cross entropy from visual phone N-best and scores",
         "source_sha256": hashlib.sha256(args.hypotheses.read_bytes()).hexdigest(),
         "selected_clip_ids": [row["clip_id"] for row in rows],
@@ -69,6 +79,10 @@ def main() -> None:
         for key in ("prompt_version", "source_sha256", "selected_clip_ids"):
             if previous[key] != manifest[key]:
                 raise ValueError(f"resume manifest mismatch: {key}")
+        for key in ("model", "input_mode", "max_steps", "max_length", "batch_size",
+                    "learning_rate", "seed", "initial_adapter"):
+            if previous["arguments"].get(key) != manifest["arguments"].get(key):
+                raise ValueError(f"resume training argument mismatch: {key}")
     else:
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
@@ -86,14 +100,22 @@ def main() -> None:
         tokenizer.pad_token = tokenizer.eos_token
     encoded = []
     skipped = 0
+    training_items = []
     for row in rows:
-        messages = [{"role": "user", "content": nbest_prompt(row)}]
+        if args.input_mode == "nbest":
+            training_items.append((nbest_prompt(row), row["reference_words"]))
+        else:
+            training_items.extend((direct_prompt(hypothesis["phones"]), row["reference_words"])
+                                  for hypothesis in row["phone_hypotheses"])
+    random.Random(args.seed + 1).shuffle(training_items)
+    for prompt_text, reference_words in training_items:
+        messages = [{"role": "user", "content": prompt_text}]
         prefix = tokenizer.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=True, enable_thinking=False,
         )
         if hasattr(prefix, "input_ids"):
             prefix = prefix.input_ids
-        target = tokenizer.encode(" ".join(row["reference_words"]), add_special_tokens=False)
+        target = tokenizer.encode(" ".join(reference_words), add_special_tokens=False)
         target.append(tokenizer.eos_token_id)
         complete = prefix + target
         if len(complete) > args.max_length:
@@ -103,8 +125,9 @@ def main() -> None:
                         "labels": [-100] * len(prefix) + target})
     if not encoded:
         raise ValueError("all examples exceeded max length")
-    LOGGER.info("selected=%d encoded=%d skipped_length=%d device=%s", len(rows), len(encoded),
-                skipped, "cuda" if torch.cuda.is_available() else "cpu")
+    LOGGER.info("selected_records=%d mode=%s training_items=%d encoded=%d skipped_length=%d device=%s",
+                len(rows), args.input_mode, len(training_items), len(encoded), skipped,
+                "cuda" if torch.cuda.is_available() else "cpu")
     model = AutoModelForImageTextToText.from_pretrained(
         args.model, local_files_only=True, dtype=torch.bfloat16, low_cpu_mem_usage=True,
     )
@@ -121,7 +144,23 @@ def main() -> None:
     model.enable_input_require_grads()
     model.gradient_checkpointing_enable()
 
+    pause_path = args.pause_file.resolve()
+    deadline = None
+
     class ProgressLog(TrainerCallback):
+        def on_train_begin(self, args, state, control, **kwargs):
+            if pause_path.exists():
+                control.should_training_stop = True
+            return control
+
+        def on_step_end(self, args, state, control, **kwargs):
+            if pause_path.exists() or (deadline is not None and time.monotonic() >= deadline):
+                LOGGER.info("Pause or time limit reached; saving resumable checkpoint at step=%d",
+                            state.global_step)
+                control.should_save = True
+                control.should_training_stop = True
+            return control
+
         def on_log(self, args, state, control, logs=None, **kwargs):
             LOGGER.info("step=%d metrics=%s", state.global_step, logs)
 
@@ -140,6 +179,8 @@ def main() -> None:
         callbacks=[ProgressLog()],
     )
     LOGGER.info("training device=%s resume=%s", trainer.args.device, args.resume)
+    if args.max_minutes is not None:
+        deadline = time.monotonic() + args.max_minutes * 60
     result = trainer.train(resume_from_checkpoint=True if args.resume else None)
     trainer.save_model(str(args.output / "adapter"))
     tokenizer.save_pretrained(args.output / "adapter")
@@ -151,4 +192,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

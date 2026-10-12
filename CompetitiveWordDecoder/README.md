@@ -1,5 +1,88 @@
 # Competitive Word Decoder
 
+This is the dedicated workspace for the **phoneme-to-word model**: training,
+teacher experiments, distillation, and word-error evaluation.
+
+## Entry points
+
+### Original Llama clean-phone baseline
+
+See [VALLR_CLEAN.md](VALLR_CLEAN.md) for the upstream Llama-3.2-3B/WikiText-2
+reproduction, clean held-out evaluation, checkpoints, pause/resume, and known
+upstream quirks. This experiment deliberately excludes noisy visual inputs.
+
+### Local DeepSeek worker
+
+Run a bounded task through the repository wrapper:
+
+```bash
+bash tools/local-deepseek CompetitiveWordDecoder/deepseek-training-review.txt
+```
+
+The default mode is `read-only`; an explicit second argument `workspace-write`
+allows edits. The wrapper uses the installed local employee client and LM Studio
+server; it does not download a model or fall back to a cloud model. Reports are
+stored under `/home/elinzi/.lmstudio/employee/jobs/`.
+
+The 2026-10-09 review completed successfully. Its resume-setting and hypothesis
+validation findings were independently checked and implemented. Its proposal
+for built-in validation was deferred because generation WER is already measured
+with the separate evaluator. The proposed resume patch required correction:
+hyperparameters live under the manifest's `arguments` field.
+
+### Training continuation
+
+The 2026-10-09 continuation uses the prior noisy-direct 2B adapter, learning rate
+1e-5, 1,000 additional steps, and a 10-minute limit. Outputs are stored in
+`checkpoints/competitive-word-decoder-lrs3-noisy-direct-20261009/`. This is a new
+adapter continuation with a fresh optimizer, not an optimizer-state resume.
+Teacher training now accepts `--max-minutes`; reaching that limit saves a
+resumable checkpoint just like `PAUSE`. The stronger clean-phone baseline is
+retained until the continuation's validation WER is measured.
+
+| Task | Module |
+| --- | --- |
+| Train on noisy visual phoneme hypotheses | `CompetitiveWordDecoder.train_noisy_teacher` |
+| Evaluate the combined N-best teacher | `CompetitiveWordDecoder.evaluate_noisy_teacher` |
+| Distill candidate rankings into a smaller model | `CompetitiveWordDecoder.train_distilled_reranker` |
+| Evaluate the VALLR prompt baseline | `CompetitiveWordDecoder.evaluate_vallr_qwen` |
+| Evaluate individual-hypothesis generation | `PhonemeDecoder.evaluate_qwen_direct` |
+
+`PhonemeDecoder/` contains the existing lexical decoder and shared Qwen
+utilities. `VisualPhoneme/` produces the visual phoneme evidence. New word-model
+experiments belong here; datasets stay under `datasets/decoder-training/` and
+weights/results under `checkpoints/competitive-word-decoder-*/`.
+
+The current LRS3 noisy training export is
+`datasets/decoder-training/lrs3-full-forced-direct-train-5k/phone-hypotheses.jsonl`.
+Its matched validation export is
+`datasets/decoder-training/lrs3-full-forced-direct-validation/phone-hypotheses.jsonl`.
+
+## LRS3 noisy teacher pilot results (2026-10-02)
+
+Exported 5,000 unique training clips using the frozen gated-fusion epoch-3
+checkpoint, beam 64, five hypotheses, and phone bigram weight 0.5. Validation
+overlap was zero. Training oracle PER@5 was 77.98%. These are predictions from
+a visual model that previously trained on this corpus; they are not out-of-fold
+training examples. Evaluation uses the existing 1,140 held-out validation clips.
+
+| Decoder | Top-1 WER | Oracle WER@5 |
+| --- | ---: | ---: |
+| Previous clean-phone 2B adapter, individual hypotheses | 104.58% | 96.94% |
+| Noisy individual-hypothesis 2B continuation, 1,000 steps | 120.19% | 105.96% |
+| Combined five-hypothesis teacher, best tested step 800 | 114.88% | Not measured |
+
+The individual continuation covered 4,000 of the 25,000 expanded training
+pairs (0.16 epoch). It regressed on held-out validation, so its predictions
+should not be used to distill a student. The combined prompt also failed to
+beat the prior individual decoder. The previous adapter remains the baseline.
+The new training export and checkpoints are retained for further experiments.
+
+Teacher training supports `--pause-file PAUSE`: a request saves a resumable
+checkpoint and stops after the current step. Remove the file and use `--resume`
+to continue. Combined training prompts had a maximum actual length of 427
+tokens, within the configured 512-token limit.
+
 This folder isolates phoneme/viseme-to-word decoding experiments from both the
 original `VALLR` subtree and the visual encoder. Its goal is a fair decoder
 leaderboard on fixed visual hypotheses, with top-1 WER, oracle WER@N, latency,
@@ -7,14 +90,17 @@ and model size reported together.
 
 ## What the original VALLR repository provides
 
-`VALLR/Models/Llama.py` is a **training recipe**, not a runnable released word
-decoder. It creates clean ARPAbet-to-text examples from WikiText-2 and fine-tunes
-Qwen3.5-2B using LoRA. It does not include the trained LoRA adapter, load VALLR
+The unmodified upstream `Models/Llama.py` at commit
+`db932ca83ff8b2b858eb6a4c78d02b5e3805c299` is a **training recipe**, not a runnable
+released word decoder. It creates clean ARPAbet-to-text examples from WikiText-2
+and fine-tunes **Llama-3.2-3B-Instruct** using LoRA. Our local
+`VALLR/Models/Llama.py` was modified to use Qwen3.5-2B; that is not the original
+VALLR model. The recipe does not include the trained LoRA adapter, load VALLR
 visual predictions, perform beam search, or report WER. Consequently, running
 the local Qwen base without an adapter is only a zero-shot diagnostic; it is not
 an evaluation of a released VALLR word decoder.
 
-The evaluator here exactly reproduces that script's tag-based input format and
+The Qwen evaluator here reproduces the local script's tag-based input format and
 records this provenance in every result:
 
 ```bash
@@ -88,8 +174,8 @@ tools/with-vpa-gpu .venv-qwen/bin/python \
 Create `PAUSE` to release the GPU after the current optimizer step; remove it to
 continue. Repeat the command with `--resume` after an interruption. The first
 pilot deliberately uses GRID because its training hypotheses and held-out
-validation hypotheses already exist. LRS3 currently has validation hypotheses
-only, and those must not be reused for decoder training.
+validation hypotheses already existed when this pilot ran. LRS3 now also has a
+separate 5,000-clip training export; validation hypotheses remain evaluation-only.
 
 ### Pilot result (2026-10-01)
 

@@ -1,0 +1,7 @@
+Perform a read-only review in /home/elinzi/Coding/VALLRITE.
+Read only CompetitiveWordDecoder/train_noisy_teacher.py,
+CompetitiveWordDecoder/noisy_teacher.py, and PhonemeDecoder/evaluate_qwen_direct.py.
+Do not edit files or run training, install packages, or read checkpoints/datasets.
+Identify at most three concrete correctness issues concerning resume, pause,
+train/validation separation, or matching training/inference prompts.
+Report file locations and a minimal fix for each. Do not claim tests were run.
