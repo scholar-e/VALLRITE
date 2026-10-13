@@ -311,7 +311,7 @@ class LargeVisualPhoneme(nn.Module):
         )
         self.classifier = nn.Linear(width, classes)
 
-    def forward(self, video: torch.Tensor) -> torch.Tensor:
+    def forward_features(self, video: torch.Tensor) -> torch.Tensor:
         if video.ndim != 5 or video.shape[2] != 1:
             raise ValueError("video must have shape [batch,time,1,height,width]")
         batch, steps, channels, height, width = video.shape
@@ -320,7 +320,10 @@ class LargeVisualPhoneme(nn.Module):
         ).flatten(1)
         encoded = self.image_projection(images)
         encoded = encoded.reshape(batch, steps, -1).transpose(1, 2)
-        return self.classifier(self.temporal(encoded).transpose(1, 2)).transpose(0, 1)
+        return self.temporal(encoded).transpose(1, 2)
+
+    def forward(self, video: torch.Tensor) -> torch.Tensor:
+        return self.classifier(self.forward_features(video)).transpose(0, 1)
 
     @property
     def parameter_count(self) -> int:
