@@ -53,6 +53,9 @@ def configure_logging(path: Path) -> None:
 
 def load_model(checkpoint: dict, device: torch.device):
     architecture = checkpoint.get("architecture", "image")
+    if architecture == "phone-family-context":
+        from VisualPhoneme.train_phone_head import load_phone_export
+        return architecture, load_phone_export(checkpoint).to(device).eval()
     classes = {"image": CompactVisualPhoneme, "large-image": LargeVisualPhoneme,
                "coordinates": CompactLandmarkPhoneme,
                "fusion": CompactFusionVisualPhoneme,
@@ -175,12 +178,12 @@ def main() -> None:
         parser.error("modality ablation requires a fusion checkpoint")
     coordinate_mode = checkpoint.get("coordinate_mode", "eye-normalized")
     coordinate_features = checkpoint.get("coordinate_features", "position")
-    include_landmarks = architecture not in {"image", "large-image"}
+    include_landmarks = architecture not in {"image", "large-image", "phone-family-context"}
     if (include_landmarks
             and landmark_feature_dimensions(coordinate_features) != int(
                 checkpoint.get("coordinate_dimensions", 2))):
         raise ValueError("checkpoint coordinate dimensions are inconsistent")
-    include_video = architecture in {"image", "large-image", "fusion", "gated-fusion",
+    include_video = architecture in {"image", "large-image", "phone-family-context", "fusion", "gated-fusion",
                                      "tongue-gated-fusion", "large-gated-fusion",
                                      "large-transformer-fusion", "autoavsr-fusion"}
     dataset_name = checkpoint.get("dataset", "grid") if args.dataset == "auto" else args.dataset
@@ -190,7 +193,7 @@ def main() -> None:
         selected_limit, False, include_landmarks, include_video, False, coordinate_mode,
         args.frame_cache_dir, coordinate_features,
     )
-    collate = {"image": collate_clips, "large-image": collate_clips,
+    collate = {"image": collate_clips, "large-image": collate_clips, "phone-family-context": collate_clips,
                "coordinates": collate_landmark_clips,
                "fusion": collate_fusion_clips, "gated-fusion": collate_fusion_clips,
                "tongue-gated-fusion": collate_fusion_clips,
