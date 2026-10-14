@@ -156,6 +156,8 @@ def _main(guard_stack):
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation", type=int, default=4)
     parser.add_argument('--visual-families', action='store_true')
+    parser.add_argument('--visual-errors', type=Path)
+    parser.add_argument('--visual-error-heldout', type=Path)
     parser.add_argument('--family-format', choices=('codes', 'alternatives'), default='codes')
     parser.add_argument('--max-length', type=int, default=512)
     parser.add_argument('--family-reference', type=Path,
@@ -194,7 +196,12 @@ def _main(guard_stack):
                         format="%(asctime)s %(levelname)s %(filename)s:%(lineno)d %(message)s",
                         handlers=[logging.FileHandler(args.output / "train.log"), logging.StreamHandler()])
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    if args.visual_families:
+    if args.visual_errors and (not args.end_of_answer or not args.initial_adapter or
+                              not args.visual_error_heldout or args.visual_families or args.synthetic_noise):
+        parser.error('visual errors require EOS, initial adapter, heldout file, and no other input mode')
+    if args.visual_error_heldout and not args.visual_errors:
+        parser.error('heldout file requires visual errors')
+    if args.visual_families or args.visual_errors:
         from VisualPhoneme.thermal import ThermalGuard
         guard_stack.enter_context(ThermalGuard(args.output, gpu_required=True))
     import torch
@@ -265,6 +272,11 @@ def _main(guard_stack):
                     converted.append(item)
             family_stats[split] = {'original': len(records), 'kept': len(converted)}
             rows[split] = converted
+    visual_error_metadata=None
+    if args.visual_errors:
+        from CompetitiveWordDecoder.visual_error_data import build_rows
+        rows,visual_error_metadata=build_rows(args.visual_errors,args.visual_error_heldout,
+                                            Path('datasets/lrs3/manifests/train.jsonl'))
     manifest = {"model": MODEL, "revision": REVISION, "seed": 42, "smoke": args.smoke,
                 "upstream_commit": "db932ca83ff8b2b858eb6a4c78d02b5e3805c299",
                 "split_counts": {k: len(v) for k, v in rows.items()}, "duplicates_removed": duplicates,
@@ -297,6 +309,9 @@ def _main(guard_stack):
                                       "operation_weights": [.6, .25, .15],
                                       "evaluation_split": "validation"}
     manifest_path = args.output / "manifest.json"
+    if args.visual_errors:
+        manifest['visual_errors']=visual_error_metadata
+        manifest['precision']='bfloat16'
     if args.max_length != 512:
         manifest['max_length'] = args.max_length
     if args.visual_families:
@@ -361,7 +376,7 @@ def _main(guard_stack):
         LOG.info("Paused before model loading")
         return
     model = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION, cache_dir=cache,
-                                               dtype=torch.bfloat16 if args.visual_families else torch.float16,
+                                               dtype=torch.bfloat16 if args.visual_families or args.visual_errors else torch.float16,
                                                attn_implementation="sdpa")
     model.resize_token_embeddings(len(tokenizer))
     if args.evaluate_only:
@@ -418,7 +433,7 @@ def _main(guard_stack):
             per_device_train_batch_size=args.batch_size, per_device_eval_batch_size=1,
             gradient_accumulation_steps=args.gradient_accumulation, learning_rate=args.learning_rate, weight_decay=.01,
             warmup_steps=math.ceil(.03 * total_steps),
-            fp16=not args.visual_families, bf16=args.visual_families, gradient_checkpointing=True,
+            fp16=not (args.visual_families or args.visual_errors), bf16=bool(args.visual_families or args.visual_errors), gradient_checkpointing=True,
             eval_strategy="epoch", save_strategy="steps", save_steps=250, save_total_limit=2,
             logging_steps=1 if args.smoke else 10, report_to="none", disable_tqdm=True, seed=42),
             train_dataset=Dataset.from_list(encoded["train"]),
@@ -457,6 +472,9 @@ def _main(guard_stack):
             report["conditions"][condition] = entry
         (args.output / "synthetic-results.json").write_text(json.dumps(report, indent=2)+"\n")
         LOG.info("Synthetic evaluation complete: %s", args.output / "synthetic-results.json")
+        return
+    if args.visual_errors:
+        LOG.info('Visual-error continuation complete; run matched external visual and clean-phone evaluations')
         return
     test_rows = rows["validation"] if args.visual_families else rows["test"]
     if args.test_limit:
