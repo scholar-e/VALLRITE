@@ -1,5 +1,12 @@
 # Compact visual phoneme recognizer
 
+See the [future run and training plan](../FUTURE_TRAINING_PLAN.md) for prioritized
+experiments, proposed compute budgets, and promotion/stop criteria.
+
+See [the consolidated methodology and experiment record](METHODOLOGY.md) for
+data lineage, metric definitions, visual/word-decoder experiments, alignment
+diagnostics, and the acceptance gates for further training.
+
 This branch trains a small visual-only network directly on face video. A shared
 2D CNN recognizes each grayscale frame, a dilated temporal convolution stack
 models motion and coarticulation, and a CTC head predicts an ARPAbet phoneme
