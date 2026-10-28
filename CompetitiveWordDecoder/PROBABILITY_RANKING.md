@@ -1,5 +1,35 @@
 # Probabilistic phone-path sentence ranking
 
+## Current context-model comparison, 2026-10-28
+
+The same fixed rule was evaluated on cached context-model sentences from the
+retained clean EOS adapter and the current-error mixed adapter. Each adapter
+scored its own sentences. No training, candidate generation, weight fitting or
+reference-dependent selection was performed. Both runs used batch size 4,
+thermal protection, PAUSE checks and a ten-minute process cap.
+
+| Adapter | Unranked WER (errors) | Fixed probability-ranked WER (errors) | Mean-score diagnostic WER | Unchanged oracle WER@5 |
+|---|---:|---:|---:|---:|
+| Retained clean EOS | 95.48% (12,102) | 95.29% (12,078) | 95.47% | 92.53% |
+| Current-error mixed | 95.23% (12,070) | 93.29% (11,824) | 95.12% | 90.12% |
+
+Both contain the same 1,140 clips and 12,675 reference words. Every cached
+candidate string was checked against its original report, and baseline and
+oracle error counts match exactly. The five ranker unit tests pass.
+
+The primary rule removes 246 errors (1.94 percentage points) for mixed and
+24 errors (0.19 points) for clean. Mixed plus ranking is 2.19 points better
+than the original unranked clean baseline and 2.00 points better than ranked
+clean. Retain the fixed rule as a promising experimental configuration; this
+single-seed, repeatedly inspected development result is not confirmation on an
+independent test set. Even perfect selection from the mixed pool leaves 90.12%
+WER, so the next priority is candidate quality, not tuning ranking weights on
+these references. No additional experiment was launched.
+
+Artifacts: `checkpoints/context-baseline-ranked-20261028` and
+`checkpoints/context-mixed-ranked-20261028`, each with manifest, per-candidate
+scores, metrics and logs. Both evaluations finished in under one minute.
+
 ## Frozen pilot, 2026-10-12
 
 This validates a low-cost probability-aware selection pipeline before changing
