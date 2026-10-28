@@ -3,6 +3,11 @@
 2026-10-13. This is a matched development experiment, not a deployment change.
 See [METHODOLOGY.md](METHODOLOGY.md) for data lineage and metric definitions.
 
+2026-10-28 clarification: "full training clips" below means complete prepared
+dataset rows, many of which are already short pretraining segments. The selected
+training median is 28 frames versus 73 for evaluation. See the
+[system audit](SYSTEM_AUDIT.md) for crop, padding and blank-calibration findings.
+
 ## Question and predeclared comparison
 
 Can a trainable nonlinear temporal phone head improve exact-phone PER over a

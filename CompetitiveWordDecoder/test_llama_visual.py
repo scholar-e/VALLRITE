@@ -6,6 +6,16 @@ from CompetitiveWordDecoder.evaluate_llama_visual import score_records, input_it
 class TestScoreRecords(unittest.TestCase):
     """Tests for score_records function."""
 
+    def test_visual_top_one_never_uses_reference_input_or_reports_oracle(self):
+        rows = [dict(clip_id='a', reference_words=['secret'], reference_phones=['S'],
+                     phone_hypotheses=[dict(rank=1, phones=['K','AE','T'])])]
+        prompt = input_items(rows)[0][2]
+        self.assertIn('K AE T', prompt)
+        self.assertNotIn('secret', prompt)
+        result = score_records(rows, [[dict(text='cat',hit_generation_cap=False)]],top_one=True)
+        self.assertEqual(result['top_1']['wer'],1)
+        self.assertNotIn('oracle_at_5',result)
+
     def test_reference_mode_uses_only_reference_phones(self):
         rows = [{'clip_id': 'r', 'reference_words': ['secret'],
                  'reference_phones': ['K', 'AE', 'T'],

@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import logging
+import math
 from pathlib import Path
 import re
 import sys
@@ -131,6 +132,8 @@ def main() -> None:
     parser.add_argument("--lm-order", type=int, choices=(2, 3), default=2)
     parser.add_argument("--token-bonuses", default="0",
                         help="comma-separated score added whenever a token is emitted")
+    parser.add_argument("--blank-logit-bias", type=float, default=0.0,
+                        help="fixed adjustment to blank before log-softmax; calibrate on training-side data")
     parser.add_argument("--beam-width", type=int, default=64)
     parser.add_argument("--beam-token-top-k", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -151,7 +154,7 @@ def main() -> None:
     n_values = sorted({int(value) for value in args.n_values.split(",")})
     lm_weights = [float(value) for value in args.lm_weights.split(",")]
     token_bonuses = [float(value) for value in args.token_bonuses.split(",")]
-    if (not args.checkpoint.is_file() or not n_values or n_values[0] < 1
+    if (not args.checkpoint.is_file() or not math.isfinite(args.blank_logit_bias) or not n_values or n_values[0] < 1
             or args.beam_width < n_values[-1] or args.beam_token_top_k < 1
             or any(weight < 0 for weight in lm_weights) or args.lm_smoothing <= 0
             or not token_bonuses or any(not torch.isfinite(torch.tensor(value))
@@ -227,6 +230,9 @@ def main() -> None:
             logits, output_lengths = upsample_ctc_logits(
                 logits, lengths, int(checkpoint.get("ctc_upsample_factor", 1))
             )
+            if args.blank_logit_bias:
+                logits = logits.clone()
+                logits[..., 0] += args.blank_logit_bias
             log_probabilities = logits.log_softmax(-1).transpose(0, 1).cpu()
             hypotheses = greedy_decode(logits, output_lengths)
             offset = 0
@@ -295,6 +301,7 @@ def main() -> None:
                         for rank, (sequence, score) in enumerate(candidates, 1)
                     ],
                     "lm_weight": lm_weight,
+                    "blank_logit_bias": args.blank_logit_bias,
                 }, allow_nan=False) + "\n")
             for n in n_values:
                 subset = sequences[:n]
@@ -335,6 +342,7 @@ def main() -> None:
         "greedy_group_per": greedy_group_errors / phones,
         "beam_width": args.beam_width, "beam_token_top_k": args.beam_token_top_k,
         "lm_smoothing": args.lm_smoothing, "lm_order": args.lm_order,
+        "blank_logit_bias": args.blank_logit_bias,
         "results": results,
         "seconds": time.perf_counter() - started,
         "test_speakers_evaluated": False,

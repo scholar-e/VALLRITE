@@ -299,6 +299,12 @@ or credentials as part of review or debugging.
 
 ## Options and acceptance gates
 
+2026-10-28 update: the [system audit](SYSTEM_AUDIT.md) identifies short training
+segments, differing crop policies, padding sensitivity and excessive blank
+emission. Training-side blank calibration improves exact greedy PER to 68.85%,
+but applying it to beam decoding worsens results. This is an experimental
+inference adjustment, not a retrained or independently confirmed model.
+
 1. **Retain the older phone baseline.** Lowest cost and immediately reversible;
    its exact PER is better than the current new head, although still poor.
 2. **Repair/validate timing supervision, then repeat a controlled adaptation.**
