@@ -11,18 +11,19 @@ from CompetitiveWordDecoder.noisy_teacher import load_nbest
 from CompetitiveWordDecoder.evaluate_vallr_qwen import vallr_prompt
 from CompetitiveWordDecoder.train_vallr_clean import MODEL, REVISION, edit_distance
 from PhonemeDecoder.evaluate_qwen_direct import words
+from CompetitiveWordDecoder.generated_tokens import generation_record
 
 LOG = logging.getLogger(__name__)
 
 
-def score_records(records, generated, reference_mode=False):
+def score_records(records, generated, reference_mode=False, top_one=False):
     """One decoded output per ranked visual hypothesis; oracle uses references only for scoring."""
     total = top = oracle = exact = capped = 0
     details = []
     if len(records) != len(generated):
         raise ValueError('record/output count mismatch')
     for row, outputs in zip(records, generated, strict=True):
-        if len(outputs) != (1 if reference_mode else 5) or any(item is None for item in outputs):
+        if len(outputs) != (1 if reference_mode or top_one else 5) or any(item is None for item in outputs):
             raise ValueError('unexpected number of complete generations')
         reference = words(' '.join(row['reference_words']))
         if not reference:
@@ -43,7 +44,7 @@ def score_records(records, generated, reference_mode=False):
             'oracle_at_5': {'word_errors': oracle, 'wer': oracle/total,
                             'exact_hits': exact, 'exact_accuracy': exact/len(records)},
             'capped_generations': capped, 'records_detail': details}
-    if reference_mode:
+    if reference_mode or top_one:
         report.pop('oracle_at_5')
         report['exact_hits'] = exact
         report['exact_accuracy'] = exact/len(records)
@@ -73,10 +74,14 @@ def _main(guard_stack):
     parser.add_argument('--limit', type=int, help='Smoke-test first N records only')
     parser.add_argument('--reference-phones', action='store_true',
                         help='Diagnostic: decode one reference phone sequence per clip, not visual predictions')
+    parser.add_argument('--visual-top-one', action='store_true',
+                        help='Decode a single saved visual hypothesis; report no oracle metric')
     parser.add_argument('--visual-families', action='store_true')
     parser.add_argument('--family-format', choices=('codes', 'alternatives'), default='codes')
     parser.add_argument('--max-prompt-tokens', type=int, default=512)
     args = parser.parse_args()
+    if args.visual_top_one and args.reference_phones:
+        parser.error('choose visual top-one or reference phones, not both')
     if args.max_prompt_tokens < 1 or (args.family_format != 'codes' and not args.visual_families):
         parser.error('invalid context limit or family format')
     if args.visual_families and not args.reference_phones:
@@ -97,8 +102,8 @@ def _main(guard_stack):
     if args.limit:
         records = records[:args.limit]
     for row in records:
-        if [h['rank'] for h in row['phone_hypotheses']] != [1, 2, 3, 4, 5]:
-            raise ValueError('Expected five hypotheses in visual rank order')
+        if [h['rank'] for h in row['phone_hypotheses']] != ([1] if args.visual_top_one else [1, 2, 3, 4, 5]):
+            raise ValueError('Unexpected hypotheses for requested visual mode')
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
     from peft import PeftModel
@@ -125,6 +130,8 @@ def _main(guard_stack):
                   'scope': 'stored LRS3 development-validation visual predictions; not official test WER',
                   'oracle_definition': 'minimum word edit count among five separately decoded visual hypotheses'}
     provenance['input_mode'] = 'reference_phones' if args.reference_phones else 'visual_nbest'
+    if args.visual_top_one:
+        provenance.update(input_mode='visual_top_one', oracle_definition=None)
     provenance['prompt_token_limit'] = args.max_prompt_tokens
     training_metrics = args.adapter.parent/'training-metrics.json'
     if training_metrics.exists():
@@ -157,7 +164,7 @@ def _main(guard_stack):
     model.resize_token_embeddings(len(tokenizer))
     model = PeftModel.from_pretrained(model, args.adapter, local_files_only=True).cuda().eval()
     model.config.use_cache = True
-    generated = [[None]*(1 if args.reference_phones else 5) for _ in records]
+    generated = [[None]*(1 if args.reference_phones or args.visual_top_one else 5) for _ in records]
     started = time.monotonic()
     LOG.info('Starting records=%d generations=%d', len(records), len(items))
     with (args.output/'generations.jsonl').open('w') as handle, torch.inference_mode():
@@ -173,11 +180,7 @@ def _main(guard_stack):
                                     eos_token_id=tokenizer.eos_token_id)
             continuations = result[:, inputs['input_ids'].shape[1]:].tolist()
             for (i, j, _), ids in zip(batch, continuations, strict=True):
-                terminated = tokenizer.eos_token_id in ids
-                if terminated:
-                    ids = ids[:ids.index(tokenizer.eos_token_id)]
-                output = {'text': tokenizer.decode(ids, skip_special_tokens=True),
-                          'hit_generation_cap': not terminated and len(ids) >= 256}
+                output = generation_record(ids, tokenizer)
                 generated[i][j] = output
                 handle.write(json.dumps({'clip_id': records[i]['clip_id'], 'phone_rank': j+1,
                                          **output})+'\n')
@@ -185,7 +188,7 @@ def _main(guard_stack):
             if start == 0 or (start//args.batch_size) % 10 == 0:
                 LOG.info('generated=%d/%d elapsed=%.1fs', min(start+len(batch), len(items)),
                          len(items), time.monotonic()-started)
-    report = dict(provenance, **score_records(records, generated, args.reference_phones))
+    report = dict(provenance, **score_records(records, generated, args.reference_phones, args.visual_top_one))
     report['elapsed_seconds'] = time.monotonic()-started
     (args.output/'metrics.json').write_text(json.dumps(report, indent=2)+'\n')
     LOG.info('Complete mode=%s top1_WER=%.2f%% capped=%d',

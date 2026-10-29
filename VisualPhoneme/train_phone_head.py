@@ -63,6 +63,11 @@ def aligned_phone_loss(logits, frame_labels):
     return nn.functional.cross_entropy(logits.permute(1,2,0),frame_labels,ignore_index=-100)
 
 
+def active_family_objective(phone_loss, family_loss, weight=.3):
+    """A frozen independent family branch is a diagnostic, not regularization."""
+    return phone_loss + weight * family_loss if family_loss.requires_grad else phone_loss
+
+
 class PhoneFamilyModel(LargeVisualPhoneme):
     def __init__(self):
         super().__init__(classes=len(VISUAL_GROUPS)+1)
@@ -292,7 +297,7 @@ def main():
                 targets=packed.cuda()
                 phone_loss=ctc(phones.log_softmax(-1),targets,out_lengths,target_lengths)
                 family_loss=ctc(families.log_softmax(-1),mapping[targets],out_lengths,target_lengths)
-                loss=phone_loss+.3*family_loss+args.aligned_weight*frame_loss
+                loss=active_family_objective(phone_loss,family_loss)+args.aligned_weight*frame_loss
                 if auxiliary_mapping is not None:
                     auxiliary_targets=torch.tensor(auxiliary_mapping,device=targets.device)[targets]
                     loss=loss+args.phone_family_weight*ctc(
@@ -303,7 +308,7 @@ def main():
                 torch.nn.utils.clip_grad_norm_(model.parameters(),5,error_if_nonfinite=True)
                 optimizer.step(); completed=step+1
                 if completed%10==0:
-                    LOG.info('step=%d/%d warmup=%s phone_loss=%.4f family_loss=%.4f frame_loss=%.4f',completed,args.steps,warm,phone_loss.item(),family_loss.item(),frame_loss.item())
+                    LOG.info('step=%d/%d warmup=%s phone_loss=%.4f family_loss=%.4f family_active=%s frame_loss=%.4f',completed,args.steps,warm,phone_loss.item(),family_loss.item(),family_loss.requires_grad,frame_loss.item())
                 if completed%args.eval_every==0 or completed==args.steps:
                     save(completed)
                     metrics,_=evaluate(); history.append(dict(step=completed,**metrics)); save(completed)

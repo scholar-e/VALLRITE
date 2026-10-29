@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/elinzi/Coding/VALLRITE
+root=checkpoints/architecture-audit-20261029
+train_root=checkpoints/decoder-matched-smalllr-20261029
+source=checkpoints/matched-phones-20261029/validation/phone-hypotheses.jsonl
+.venv-qwen/bin/python -c 'import json; from pathlib import Path; p=Path("checkpoints/decoder-matched-smalllr-20261029"); s=json.loads((p/"trainer_state.json").read_text()); assert s["global_step"]==s["max_steps"]==375'
+for step in 250 375; do
+  test ! -f PAUSE
+  test ! -f "$train_root/PAUSE"
+  adapter="$train_root/checkpoint-$step"
+  output="$root/smalllr-$step-validation"
+  timeout --signal=TERM --kill-after=30s 600s tools/with-vpa-gpu .venv-qwen/bin/python -c 'import runpy; from pathlib import Path; from VisualPhoneme.thermal import ThermalGuard
+with ThermalGuard(Path("checkpoints/architecture-audit-20261029"),gpu_required=True): runpy.run_module("CompetitiveWordDecoder.evaluate_llama_visual",run_name="__main__")' --hypotheses "$source" --adapter "$adapter" --output "$output" --batch-size 16
+  test -f "$output/metrics.json"
+  timeout --signal=TERM --kill-after=30s 600s tools/with-vpa-gpu .venv-qwen/bin/python -m CompetitiveWordDecoder.evaluate_probability_ranker --hypotheses "$source" --decoder-report "$output/metrics.json" --adapter "$adapter" --output "$output-ranked" --batch-size 4 --require-exact-tokens
+  test -f "$output-ranked/metrics.json"
+done
+.venv-qwen/bin/python -m CompetitiveWordDecoder.select_validation_adapter --expected-source "$source" --reports "$root/baseline-validation-exact/metrics.json" "$root/smalllr-250-validation-ranked/metrics.json" "$root/smalllr-375-validation-ranked/metrics.json" --output "$root/selection"

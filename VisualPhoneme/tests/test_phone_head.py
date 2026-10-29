@@ -1,12 +1,21 @@
 import unittest
 import torch
-from VisualPhoneme.train_phone_head import PhoneFamilyModel, aligned_phone_loss, ContextPhoneHead, load_phone_export
+from VisualPhoneme.train_phone_head import PhoneFamilyModel, aligned_phone_loss, ContextPhoneHead, load_phone_export, active_family_objective
 from VisualPhoneme.model import LargeVisualPhoneme
 from VisualPhoneme.visemes import PHONE_ID_TO_VISUAL_GROUP_ID
 from VisualPhoneme.phone_family_objectives import family_partition, family_log_probs
 
 
 class PhoneHeadTests(unittest.TestCase):
+    def test_frozen_family_does_not_change_objective_or_gradient(self):
+        x=torch.tensor(2.,requires_grad=True)
+        loss=active_family_objective(x.square(),torch.tensor(1000.))
+        self.assertEqual(loss.item(),4.)
+        loss.backward();self.assertEqual(x.grad.item(),4.)
+        x.grad=None
+        loss=active_family_objective(x.square(),3*x)
+        loss.backward();self.assertAlmostEqual(x.grad.item(),4.9,places=5)
+
     def test_family_partitions_and_probability_gradient(self):
         for name,count in [('original',17),('fine',31),('coarse',10)]:
             groups,mapping=family_partition(name)

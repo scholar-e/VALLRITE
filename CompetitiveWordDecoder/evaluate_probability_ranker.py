@@ -12,6 +12,7 @@ from CompetitiveWordDecoder.noisy_teacher import load_nbest
 from CompetitiveWordDecoder.evaluate_vallr_qwen import vallr_prompt
 from CompetitiveWordDecoder.train_vallr_clean import MODEL, REVISION, edit_distance
 from PhonemeDecoder.evaluate_qwen_direct import words
+from CompetitiveWordDecoder.generated_tokens import scoring_tokens
 
 LOG = logging.getLogger(__name__)
 
@@ -85,7 +86,12 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--batch-size', type=int, default=4)
     parser.add_argument('--limit', type=int)
+    parser.add_argument('--require-exact-tokens', action='store_true')
+    parser.add_argument('--retokenize-diagnostic', action='store_true',
+                        help='reproduce legacy text scoring on the same saved candidates')
     args = parser.parse_args()
+    if args.require_exact_tokens and args.retokenize_diagnostic:
+        parser.error('exact tokens and legacy diagnostic are mutually exclusive')
     if args.batch_size < 1 or (args.limit is not None and args.limit < 1):
         parser.error('positive batch size and limit required')
     records = load_nbest(args.hypotheses)
@@ -107,6 +113,7 @@ def main():
         if [h['phone_rank'] for h in decoded['hypotheses']] != list(range(1,6)):
             raise ValueError('expected five ordered decoded sentences')
         cached.append([dict(text=h['text'], hit_generation_cap=h['hit_generation_cap'],
+                            **({'generated_token_ids': h['generated_token_ids']} if 'generated_token_ids' in h else {}),
                             phone_path_log_score=p['ctc_log_score'])
                        for p,h in zip(row['phone_hypotheses'], decoded['hypotheses'], strict=True)])
     if args.limit:
@@ -129,13 +136,13 @@ def main():
     signal.signal(signal.SIGINT, stop)
     tokenizer = AutoTokenizer.from_pretrained(args.adapter, local_files_only=True)
     items = []
+    scoring_modes = set()
     for i, row in enumerate(records):
         for j, path in enumerate(row['phone_hypotheses']):
             prefix = tokenizer.encode(vallr_prompt(path['phones']), add_special_tokens=False)
-            # Retokenize the exact saved sentence. EOS is scored only for terminated output.
-            target = tokenizer.encode(cached[i][j]['text'], add_special_tokens=False)
-            if not cached[i][j]['hit_generation_cap']:
-                target.append(tokenizer.eos_token_id)
+            target, mode = scoring_tokens(cached[i][j], tokenizer,
+                require_exact=args.require_exact_tokens, retokenize=args.retokenize_diagnostic)
+            scoring_modes.add(mode)
             if not prefix or not target or len(prefix)+len(target) > 1024:
                 raise ValueError('invalid or oversized scoring sequence; no truncation')
             items.append((i,j,prefix,target))
@@ -143,11 +150,12 @@ def main():
         source_sha256=old['source_sha256'], decoder_report_sha256=sha(args.decoder_report),
         source=str(args.hypotheses.resolve()), decoder_report=str(args.decoder_report.resolve()),
         records=len(records), limit=args.limit, score_weight=1.0,
+        scoring_token_modes=sorted(scoring_modes),
         selection='logsumexp(path beam score + decoder token log-prob sum) over identical normalized sentences',
         diagnostic='same with decoder mean token log probability; no validation-based weight tuning',
-        caveats=['path scores include phone bigram prior weight 0.5, not pure visual CTC',
+        caveats=['path scores may include a phone language-model prior; consult the source phone export',
                  'relative masses only within retained candidates; not calibrated confidence',
-                 'cached generated text retokenized for conditional scoring',
+                 'token path scoring mode recorded explicitly; legacy reports lack generated token IDs',
                  'capped outputs score observed prefix without EOS',
                  'one frozen sentence per phone path; oracle pool unchanged',
                  'development validation, not official test results'])
