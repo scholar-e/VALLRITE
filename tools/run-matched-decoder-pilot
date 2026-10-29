@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/elinzi/Coding/VALLRITE
+run_root=checkpoints/matched-phones-20261029
+base_adapter=checkpoints/decoder-current-mixed-20261027/adapter
+phone_source="$run_root/evaluation/phone-hypotheses.jsonl"
+check_pause() { test ! -e PAUSE && test ! -e "$run_root/PAUSE"; }
+word_eval() {
+  local adapter="$1" output="$2"; shift 2
+  check_pause
+  if test -f "$output/metrics.json"; then return; fi
+  timeout --signal=TERM --kill-after=30s 600s tools/with-vpa-gpu .venv-qwen/bin/python -c 'import runpy; from pathlib import Path; from VisualPhoneme.thermal import ThermalGuard; p=Path("checkpoints/matched-phones-20261029/thermal"); p.mkdir(exist_ok=True)
+with ThermalGuard(p,gpu_required=True): runpy.run_module("CompetitiveWordDecoder.evaluate_llama_visual",run_name="__main__")' --hypotheses "$phone_source" --adapter "$adapter" --output "$output" --batch-size 16 "$@"
+  test -f "$output/metrics.json"
+}
+rank_eval() {
+  local adapter="$1" report="$2" output="$3"
+  check_pause
+  if test -f "$output/metrics.json"; then return; fi
+  timeout --signal=TERM --kill-after=30s 600s tools/with-vpa-gpu .venv-qwen/bin/python -m CompetitiveWordDecoder.evaluate_probability_ranker --hypotheses "$phone_source" --decoder-report "$report/metrics.json" --adapter "$adapter" --output "$output" --batch-size 4
+  test -f "$output/metrics.json"
+}
+rank_eval "$base_adapter" "$run_root/baseline-word" "$run_root/baseline-ranked"
+word_eval "$base_adapter" "$run_root/baseline-reference" --reference-phones
+for mode in clean mixed; do
+  check_pause
+  train_dir="checkpoints/decoder-matched-$mode-20261029"
+  if ! test -f "$train_dir/TRAIN_COMPLETE"; then
+    resume_args=()
+    if test -f "$train_dir/manifest.json"; then resume_args=(--resume); fi
+    tools/with-vpa-gpu .venv-qwen/bin/python -m CompetitiveWordDecoder.train_vallr_clean --output "$train_dir" --end-of-answer --initial-adapter "$base_adapter" --epochs 1 --learning-rate 1e-5 --batch-size 4 --gradient-accumulation 1 --max-minutes 15 --visual-errors "$run_root/train/phone-hypotheses.jsonl" --visual-error-heldout "$phone_source" --visual-error-splits datasets/decoder-training/source-disjoint-950-20261029 --visual-error-mode "$mode" "${resume_args[@]}"
+    .venv-qwen/bin/python -c 'import json,sys; from pathlib import Path; p=Path(sys.argv[1]); s=json.loads((p/"trainer_state.json").read_text()); assert s["global_step"]==s["max_steps"]==375; assert (p/"checkpoint-375/trainer_state.json").is_file(); (p/"TRAIN_COMPLETE").write_text("complete\n")' "$train_dir"
+  fi
+  word_eval "$train_dir/adapter" "$train_dir/visual-eval"
+  rank_eval "$train_dir/adapter" "$train_dir/visual-eval" "$train_dir/ranked-eval"
+  word_eval "$train_dir/adapter" "$train_dir/reference-eval" --reference-phones
+done
+check_pause
+touch "$run_root/PILOT_COMPLETE"

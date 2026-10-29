@@ -157,7 +157,10 @@ def _main(guard_stack):
     parser.add_argument("--gradient-accumulation", type=int, default=4)
     parser.add_argument('--visual-families', action='store_true')
     parser.add_argument('--visual-errors', type=Path)
+    parser.add_argument('--visual-error-mode', choices=('mixed','clean'), default='mixed')
     parser.add_argument('--visual-error-heldout', type=Path)
+    parser.add_argument('--visual-error-splits', type=Path,
+                        help='frozen train/validation/evaluation manifests; preserve exact split IDs')
     parser.add_argument('--family-format', choices=('codes', 'alternatives'), default='codes')
     parser.add_argument('--max-length', type=int, default=512)
     parser.add_argument('--family-reference', type=Path,
@@ -201,6 +204,10 @@ def _main(guard_stack):
         parser.error('visual errors require EOS, initial adapter, heldout file, and no other input mode')
     if args.visual_error_heldout and not args.visual_errors:
         parser.error('heldout file requires visual errors')
+    if args.visual_error_splits and not args.visual_errors:
+        parser.error('frozen split manifests require visual errors')
+    if args.visual_error_mode!='mixed' and not args.visual_errors:
+        parser.error('visual error mode requires visual errors')
     if args.visual_families or args.visual_errors:
         from VisualPhoneme.thermal import ThermalGuard
         guard_stack.enter_context(ThermalGuard(args.output, gpu_required=True))
@@ -274,9 +281,13 @@ def _main(guard_stack):
             rows[split] = converted
     visual_error_metadata=None
     if args.visual_errors:
-        from CompetitiveWordDecoder.visual_error_data import build_rows
-        rows,visual_error_metadata=build_rows(args.visual_errors,args.visual_error_heldout,
-                                            Path('datasets/lrs3/manifests/train.jsonl'))
+        from CompetitiveWordDecoder.visual_error_data import build_rows, build_frozen_rows
+        if args.visual_error_splits:
+            rows,visual_error_metadata=build_frozen_rows(args.visual_errors,args.visual_error_heldout,
+                                                       args.visual_error_splits,args.visual_error_mode)
+        else:
+            rows,visual_error_metadata=build_rows(args.visual_errors,args.visual_error_heldout,
+                                                Path('datasets/lrs3/manifests/train.jsonl'),args.visual_error_mode)
     manifest = {"model": MODEL, "revision": REVISION, "seed": 42, "smoke": args.smoke,
                 "upstream_commit": "db932ca83ff8b2b858eb6a4c78d02b5e3805c299",
                 "split_counts": {k: len(v) for k, v in rows.items()}, "duplicates_removed": duplicates,
@@ -368,6 +379,8 @@ def _main(guard_stack):
     for split in ("train", "validation"):
         items = [encoder(row, tokenizer) for row in rows[split]]
         encoded[split] = [item for item in items if item is not None]
+        if args.visual_error_splits and len(encoded[split]) != len(items):
+            raise ValueError('Frozen adaptation contains overlength pairs; revise protocol before training')
         LOG.info("Encoded %s: kept=%d skipped=%d", split, len(encoded[split]),
                  len(items)-len(encoded[split]))
         if not encoded[split]:
@@ -408,6 +421,8 @@ def _main(guard_stack):
 
         class Progress(TrainerCallback):
             def on_step_end(self, training_args, state, control, **kwargs):
+                if args.visual_error_splits and state.global_step == state.max_steps:
+                    control.should_save = True
                 expired = args.max_minutes and time.monotonic()-start >= args.max_minutes*60
                 if paused() or expired:
                     control.should_save = True
@@ -446,6 +461,7 @@ def _main(guard_stack):
             LOG.info("Paused before training")
             return
         result = trainer.train(resume_from_checkpoint=checkpoint)
+        trainer.save_state()
         trainer.save_model(str(args.output / "adapter"))
         tokenizer.save_pretrained(args.output / "adapter")
         (args.output / "training-metrics.json").write_text(json.dumps(result.metrics, indent=2)+"\n")
