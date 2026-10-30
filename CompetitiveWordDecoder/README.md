@@ -5,6 +5,14 @@ teacher experiments, distillation, and word-error evaluation.
 
 ## Entry points
 
+### Timed visual-phone evidence
+
+[Timed phone input adapter](TIMED_PHONE_INPUT.md) adds aligned probability,
+duration and gap features to the frozen Llama decoder's phone embeddings.
+The initial pilot and relative-magnitude diagnostic are complete; neither beats
+the matched baseline, so neither is promoted. New trials use a5% relative
+embedding-vector bound and validation-WER selection including the baseline.
+
 ### Original Llama clean-phone baseline
 
 See [VALLR_CLEAN.md](VALLR_CLEAN.md) for the upstream Llama-3.2-3B/WikiText-2
