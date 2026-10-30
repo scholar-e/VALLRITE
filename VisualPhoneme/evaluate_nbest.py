@@ -14,6 +14,7 @@ import time
 import torch
 from torch.utils.data import DataLoader
 
+from VisualPhoneme.architectures import FUSION, GATED_FUSION, LANDMARK_BOTTLENECK, USES_VIDEO
 from VisualPhoneme.data import (
     GridClips, PHONEMES, collate_clips, collate_fusion_clips,
     collate_landmark_clips, ctc_prefix_beam_search, fit_bigram_log_probs,
@@ -69,12 +70,9 @@ def load_model(checkpoint: dict, device: torch.device):
     if architecture not in {"image", "large-image"}:
         arguments.update({"landmark_points": int(checkpoint["landmark_points"]),
                           "coordinate_dimensions": int(checkpoint.get("coordinate_dimensions", 2))})
-    if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion",
-                         "large-gated-fusion", "large-transformer-fusion",
-                         "autoavsr-fusion"}:
+    if architecture in LANDMARK_BOTTLENECK:
         arguments["landmark_bottleneck"] = checkpoint.get("landmark_bottleneck")
-    if architecture in {"gated-fusion", "tongue-gated-fusion", "large-gated-fusion",
-                        "large-transformer-fusion", "autoavsr-fusion"}:
+    if architecture in GATED_FUSION:
         arguments["image_gate_probability"] = checkpoint.get(
             "image_gate_initial_probability", 0.002472623
         )
@@ -173,10 +171,7 @@ def main() -> None:
     if labels != expected_labels:
         raise ValueError("checkpoint target vocabulary does not match this code")
     architecture, model = load_model(checkpoint, device)
-    fusion_architectures = {
-        "fusion", "gated-fusion", "tongue-gated-fusion", "large-gated-fusion",
-        "large-transformer-fusion", "autoavsr-fusion"
-    }
+    fusion_architectures = FUSION
     if args.ablate_modality != "none" and architecture not in fusion_architectures:
         parser.error("modality ablation requires a fusion checkpoint")
     coordinate_mode = checkpoint.get("coordinate_mode", "eye-normalized")
@@ -186,9 +181,7 @@ def main() -> None:
             and landmark_feature_dimensions(coordinate_features) != int(
                 checkpoint.get("coordinate_dimensions", 2))):
         raise ValueError("checkpoint coordinate dimensions are inconsistent")
-    include_video = architecture in {"image", "large-image", "phone-family-context", "fusion", "gated-fusion",
-                                     "tongue-gated-fusion", "large-gated-fusion",
-                                     "large-transformer-fusion", "autoavsr-fusion"}
+    include_video = architecture in USES_VIDEO | {"phone-family-context"}
     dataset_name = checkpoint.get("dataset", "grid") if args.dataset == "auto" else args.dataset
     dataset_class = GridClips if dataset_name == "grid" else Lrs3Clips
     selected_data = dataset_class(
@@ -211,9 +204,7 @@ def main() -> None:
     started = time.perf_counter()
     with torch.inference_mode():
         for batch_index, batch in enumerate(loader, 1):
-            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                                "large-gated-fusion", "large-transformer-fusion",
-                                "autoavsr-fusion"}:
+            if architecture in FUSION:
                 video, landmarks, mask, targets, lengths, target_lengths, clip_ids = batch
                 if args.ablate_modality == "image":
                     video.zero_()

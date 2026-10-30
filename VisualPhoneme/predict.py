@@ -10,6 +10,7 @@ import sys
 import numpy as np
 import torch
 
+from VisualPhoneme.architectures import FUSION, GATED_FUSION, LANDMARK_BOTTLENECK, USES_LANDMARKS
 from VisualPhoneme.data import (CROPS, PHONEMES, ctc_prefix_beam_search,
                                       decode_video, greedy_decode, landmark_feature_dimensions,
                                       transform_landmarks)
@@ -88,9 +89,7 @@ def main() -> None:
         parser.error("group checkpoints cannot use the 39-phone emission/lexicon decoder")
     crop_name = checkpoint["crop"]
     architecture = checkpoint.get("architecture", "image")
-    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
-                        "large-gated-fusion", "large-transformer-fusion",
-                        "autoavsr-fusion"} and (
+    if architecture in USES_LANDMARKS and (
             args.landmarks_npz is None or not args.landmarks_npz.is_file()):
         parser.error("a coordinate checkpoint requires an existing --landmarks-npz cache")
     model_classes = {"image": CompactVisualPhoneme, "coordinates": CompactLandmarkPhoneme,
@@ -101,17 +100,12 @@ def main() -> None:
                      "large-transformer-fusion": LargeTransformerFusionVisualPhoneme,
                      "autoavsr-fusion": AutoAvsrFusionVisualPhoneme}
     model_args = {"classes": len(phones) + 1}
-    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
-                        "large-gated-fusion", "large-transformer-fusion",
-                        "autoavsr-fusion"}:
+    if architecture in USES_LANDMARKS:
         model_args["landmark_points"] = int(checkpoint["landmark_points"])
         model_args["coordinate_dimensions"] = int(checkpoint.get("coordinate_dimensions", 2))
-    if architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion",
-                        "large-gated-fusion", "large-transformer-fusion",
-                        "autoavsr-fusion"}:
+    if architecture in LANDMARK_BOTTLENECK:
         model_args["landmark_bottleneck"] = checkpoint.get("landmark_bottleneck")
-    if architecture in {"gated-fusion", "tongue-gated-fusion", "large-gated-fusion",
-                        "large-transformer-fusion", "autoavsr-fusion"}:
+    if architecture in GATED_FUSION:
         model_args["image_gate_probability"] = checkpoint.get(
             "image_gate_initial_probability", 0.002472623
         )
@@ -123,13 +117,9 @@ def main() -> None:
     model.load_state_dict(checkpoint["model"])
     model.eval()
     video = (decode_video(args.video, CROPS[crop_name], int(checkpoint["image_size"]))
-             if architecture in {"image", "fusion", "gated-fusion",
-                                 "tongue-gated-fusion", "large-gated-fusion",
-                                 "large-transformer-fusion", "autoavsr-fusion"} else None)
+             if architecture == "image" or architecture in FUSION else None)
     landmarks = landmark_mask = None
-    if architecture in {"coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
-                        "large-gated-fusion", "large-transformer-fusion",
-                        "autoavsr-fusion"}:
+    if architecture in USES_LANDMARKS:
         with np.load(args.landmarks_npz) as cached:
             landmarks = torch.from_numpy(cached["coordinates"].astype(np.float32))
         frames = min(len(video), len(landmarks)) if video is not None else len(landmarks)
@@ -149,9 +139,7 @@ def main() -> None:
             landmarks, coordinate_mode, coordinate_features)
     input_frames = len(video) if video is not None else len(landmarks)
     with torch.inference_mode():
-        if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                            "large-gated-fusion", "large-transformer-fusion",
-                            "autoavsr-fusion"}:
+        if architecture in FUSION:
             logits = model(video.unsqueeze(0).to(device), landmarks.unsqueeze(0).to(device),
                            landmark_mask.unsqueeze(0).to(device))
         elif architecture == "coordinates":

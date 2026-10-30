@@ -19,6 +19,8 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
+from VisualPhoneme.architectures import (FUSION, GATED_FUSION, LANDMARK_BOTTLENECK,
+                                         TRAINABLE, USES_LANDMARKS, USES_VIDEO)
 from VisualPhoneme.data import (GridClips, PHONEMES, collate_aligned_clips,
                                 collate_aligned_fusion_clips,
                                 collate_aligned_landmark_clips, collate_clips,
@@ -206,9 +208,7 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
             LOGGER.warning("pause observed before step=%d", step)
             break
         frame_targets = None
-        if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                            "large-gated-fusion", "large-transformer-fusion",
-                            "autoavsr-fusion"}:
+        if architecture in FUSION:
             if training and aligned_frame_loss_weight:
                 (video, landmarks, landmark_mask, targets, lengths, target_lengths,
                  frame_targets, _) = batch
@@ -240,9 +240,7 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
                 frame_targets[valid_frame_targets] = target_id_map[
                     frame_targets[valid_frame_targets]
                 ]
-        if training and architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                                         "large-gated-fusion", "large-transformer-fusion",
-                                         "autoavsr-fusion"}:
+        if training and architecture in FUSION:
             if image_modality_dropout:
                 dropped = torch.rand(len(video), device=device) < image_modality_dropout
                 video[dropped] = 0
@@ -253,9 +251,7 @@ def run_epoch(model, loader, loss_fn, device, architecture, optimizer=None, dead
         if training:
             optimizer.zero_grad(set_to_none=True)
         with torch.set_grad_enabled(training):
-            if architecture in {"fusion", "gated-fusion", "tongue-gated-fusion",
-                                "large-gated-fusion", "large-transformer-fusion",
-                                "autoavsr-fusion"}:
+            if architecture in FUSION:
                 logits = model(video, landmarks, landmark_mask)
             elif architecture == "coordinates":
                 logits = model(landmarks, landmark_mask)
@@ -351,11 +347,7 @@ def _main(resources: ExitStack) -> None:
                              "the checkpoint the run was initialized or resumed from (zero disables)")
     parser.add_argument("--landmark-fusion", action="store_true",
                         help=argparse.SUPPRESS)
-    parser.add_argument("--architecture", choices=("image", "large-image", "coordinates", "fusion",
-                                                    "gated-fusion", "tongue-gated-fusion",
-                                                    "large-gated-fusion",
-                                                    "large-transformer-fusion",
-                                                    "autoavsr-fusion"),
+    parser.add_argument("--architecture", choices=TRAINABLE,
                         default="image", help="input modality used by this ablation")
     parser.add_argument("--horizontal-flip", action=argparse.BooleanOptionalAction, default=None,
                         help="randomly reflect training images (default: image model only)")
@@ -503,14 +495,8 @@ def _main(resources: ExitStack) -> None:
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     resources.enter_context(ThermalGuard(args.output_dir, device.type == "cuda"))
-    include_landmarks = args.architecture in {
-        "coordinates", "fusion", "gated-fusion", "tongue-gated-fusion",
-        "large-gated-fusion", "large-transformer-fusion", "autoavsr-fusion"
-    }
-    include_video = args.architecture in {
-        "image", "large-image", "fusion", "gated-fusion", "tongue-gated-fusion",
-        "large-gated-fusion", "large-transformer-fusion", "autoavsr-fusion"
-    }
+    include_landmarks = args.architecture in USES_LANDMARKS
+    include_video = args.architecture in USES_VIDEO
     dataset_class = GridClips if args.dataset == "grid" else Lrs3Clips
     teacher_options = ({
         "teacher_labels_dir": args.lrs3_teacher_labels,
@@ -586,13 +572,9 @@ def _main(resources: ExitStack) -> None:
     if include_landmarks:
         model_args["coordinate_dimensions"] = landmark_feature_dimensions(args.coordinate_features)
         model_args["landmark_points"] = train.landmark_points
-    if args.architecture in {"coordinates", "gated-fusion", "tongue-gated-fusion",
-                              "large-gated-fusion", "large-transformer-fusion",
-                              "autoavsr-fusion"}:
+    if args.architecture in LANDMARK_BOTTLENECK:
         model_args["landmark_bottleneck"] = args.landmark_bottleneck or None
-    if args.architecture in {"gated-fusion", "tongue-gated-fusion",
-                              "large-gated-fusion", "large-transformer-fusion",
-                              "autoavsr-fusion"}:
+    if args.architecture in GATED_FUSION:
         model_args["image_gate_probability"] = args.image_gate_initial_probability
     if args.architecture == "tongue-gated-fusion":
         model_args["inner_mouth_gate_probability"] = args.inner_mouth_gate_initial_probability
@@ -661,9 +643,7 @@ def _main(resources: ExitStack) -> None:
         LOGGER.info("expanded %s epoch %s with a randomly initialized REST output",
                     args.initialize_rest_checkpoint, initial.get("epoch"))
     if args.initialize_coordinate_checkpoint:
-        if (args.architecture not in {"gated-fusion", "tongue-gated-fusion",
-                                     "large-gated-fusion", "large-transformer-fusion",
-                                     "autoavsr-fusion"}
+        if (args.architecture not in GATED_FUSION
                 or not args.initialize_coordinate_checkpoint.is_file()):
             parser.error("coordinate initialization requires gated fusion and an existing checkpoint")
         initial = torch.load(args.initialize_coordinate_checkpoint, map_location="cpu",
@@ -680,9 +660,7 @@ def _main(resources: ExitStack) -> None:
         LOGGER.info("initialized %d coordinate-path tensors from %s", len(compatible),
                     args.initialize_coordinate_checkpoint)
     if args.initialize_image_checkpoint:
-        if (args.architecture not in {"gated-fusion", "tongue-gated-fusion",
-                                     "large-gated-fusion", "large-transformer-fusion",
-                                     "autoavsr-fusion"}
+        if (args.architecture not in GATED_FUSION
                 or not args.initialize_image_checkpoint.is_file()):
             parser.error("image initialization requires gated fusion and an existing checkpoint")
         initial = torch.load(args.initialize_image_checkpoint, map_location="cpu",
@@ -767,10 +745,8 @@ def _main(resources: ExitStack) -> None:
                           if math.isfinite(h["validation"]["loss"])),
                          default=float("inf"))
     for epoch in range(start_epoch, args.epochs + 1):
-        freeze_coordinate_path = (args.architecture in {
-            "gated-fusion", "tongue-gated-fusion", "large-gated-fusion",
-            "large-transformer-fusion", "autoavsr-fusion"
-        } and epoch <= args.freeze_coordinate_epochs)
+        freeze_coordinate_path = (args.architecture in GATED_FUSION
+                                  and epoch <= args.freeze_coordinate_epochs)
         freeze_image_path = epoch <= args.freeze_image_epochs
         for name in ("landmark_encoder", "temporal", "classifier"):
             module = getattr(model, name, None)
