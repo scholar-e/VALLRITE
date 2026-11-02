@@ -81,6 +81,14 @@ train, validation and test. Score greedy-CTC word output on the official test se
 the attention decoder should be somewhat worse). If far off, the preprocessing
 is wrong; fix it before Phase 2. That result may also explain earlier failures.
 
+**Status 2026-11-02 — substantially met.** The full model is ported. On the
+official test set it reaches 31.72% WER with greedy CTC and 26.35% with joint
+CTC/attention decoding and no language model, against 93.29% for the current
+pipeline on development data. The 7-point gap to the published figure is
+partly the unported language model; test-crop provenance is unverified. The
+test crops already match Auto-AVSR's style, so only training data still needs
+the new crop pipeline. See [the reproduction record](VisualPhoneme/AUTOAVSR_REPRODUCTION.md).
+
 ### Phase 2 — phone CTC head on the Auto-AVSR encoder
 
 **Budget:** propose a two-hour resumable run; extend only after inspecting curves.
