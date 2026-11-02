@@ -101,6 +101,14 @@ test set, because of the overlap in diagnosis item 6.
 
 **Gate:** clear, repeatable exact-PER gain over the current 68–71%.
 
+**Status 2026-11-02 — met on a single seed; strategic decision pending.**
+Trainval is now cropped with the Auto-AVSR procedure. On the held-out test
+half, a linear head on frozen features reaches 40.34% beam PER and a two-layer
+transformer head 27.99%. However, Auto-AVSR's own word output converted to
+phones reaches 18.80% on the same clips. The phone-first route currently loses
+to word-first decoding. Choose a direction before Phase 3. See
+[the phone-head record](VisualPhoneme/AUTOAVSR_PHONE_HEAD.md).
+
 ### Phase 3 — rerun the decoder stack on the new phones
 
 Run the clean EOS adapter and fixed ranking unchanged first. Then repeat matched
