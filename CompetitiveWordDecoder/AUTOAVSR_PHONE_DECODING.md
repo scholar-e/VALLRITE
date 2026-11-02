@@ -56,3 +56,44 @@ In expected order of payoff:
 3. Improve phones: longer context-head training, encoder-unseen training data
    (pretrain needs a face detector), Auto-AVSR word CTC as an auxiliary loss, or
    word-derived phone pseudo-labels (18.80% PER).
+
+## Matched-noise decoder adaptation, 2026-11-02
+
+`matched_phone_noise.py` measures the transformer phone head's errors on the
+**test-select** half (rank-one beam output, 28.51% PER): per-phone keep,
+delete and substitution distributions, insertion counts and identities, and
+the per-clip error-rate spread (sampled per sentence so errors stay bursty).
+It applies them to LRS3 trainval transcripts with test transcripts excluded:
+9,000 noisy rows (realized 28.79% PER) and 3,000 clean rows, plus 600
+validation rows. Targets are normalized lowercase words.
+
+`train_vallr_clean.py --prepared-rows` continued the clean EOS adapter for one
+epoch (3,000 updates, batch 4, learning rate 2e-5, bf16). Final validation loss
+0.789. Artifacts: `checkpoints/decoder-matched-noise-20261102/`,
+`datasets/decoder-training/matched-noise-20261102/`.
+
+| Decoder, same phones | Split | Top-1 WER | Ranked WER | Oracle@5 | Reference phones |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Clean EOS (unchanged) | test-select | 54.62% | 50.24% | 45.58% | — |
+| Matched noise | test-select | 44.06% | 40.85% | — | — |
+| Clean EOS (unchanged) | test-report | 54.74% | 49.83% | 44.61% | 15.33% |
+| **Matched noise (selected)** | **test-report** | **42.61%** | **40.13%** | 35.44% | **2.88%** |
+| Auto-AVSR words, joint, no LM | test-report | — | 25.54% | — | — |
+
+Selection used only test-select; test-report was evaluated once afterwards.
+
+Caveats:
+
+- **Domain and format are confounded with noise.** The old adapter learned
+  WikiText formatting (digits, split contractions: 78 of its reference-phone
+  outputs contain digits; rejoining contractions alone moves 15.33% to 13.77%).
+  The new training text is LRS3-style lowercase words. A clean-only LRS3
+  continuation (the plan's domain control) is needed to attribute the gain.
+- Training text overlap with test-report is negligible: 3 of 380 test-report
+  sentences with at least six words share any 6-gram with the training targets.
+- One seed; no uncertainty interval yet.
+
+Operational note: launched directly from a background shell, the trainer
+stopped at every thermal pause, because the shell saw the guard's SIGSTOP
+(exit 147) and its cleanup ended the trainer. Wrapping the command in
+`timeout`, as the repository scripts do, keeps the pause transparent.

@@ -125,6 +125,12 @@ same decoder on correct phones reaches 15.33%, so it is not the ceiling, but it
 amplifies phone errors. Next: matched-error decoder adaptation. See
 [the decoding record](CompetitiveWordDecoder/AUTOAVSR_PHONE_DECODING.md).
 
+**Update 2026-11-02 — matched-noise adaptation.** Continuing the decoder on
+LRS3 transcripts with phone errors matched to the measured head reduces
+held-out ranked WER from 49.83% to 40.13% (selected on test-select; single
+seed). Domain/format change is confounded with noise; run the clean-only LRS3
+control next. Auto-AVSR words remain ahead at 25.54%.
+
 ### Phase 4 — project-specific ideas on the stronger base
 
 Timed/probabilistic phone input, VPA, family objectives and audio-teacher
