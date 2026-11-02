@@ -118,6 +118,13 @@ noisy-phone adaptation with cross-fitted predictions, reusing
 **Gate:** actual selected WER beats both the 93.29% baseline and an unchanged
 decoder on the same new phones.
 
+**Status 2026-11-02 — unchanged-decoder step done; phone interface retained.**
+On 661 held-out test clips, Auto-AVSR phones through the clean EOS decoder with
+fixed ranking reach 49.83% WER, versus 25.54% for Auto-AVSR's own words. The
+same decoder on correct phones reaches 15.33%, so it is not the ceiling, but it
+amplifies phone errors. Next: matched-error decoder adaptation. See
+[the decoding record](CompetitiveWordDecoder/AUTOAVSR_PHONE_DECODING.md).
+
 ### Phase 4 — project-specific ideas on the stronger base
 
 Timed/probabilistic phone input, VPA, family objectives and audio-teacher
