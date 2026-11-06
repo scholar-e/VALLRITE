@@ -36,10 +36,10 @@ class PhoneHead(nn.Module):
     """
 
     def __init__(self, width: int = 768, upsample: int = 2, dropout: float = 0.1,
-                 layers: int = 0, hidden: int = 256):
+                 layers: int = 0, hidden: int = 256, input_dropout: float | None = None):
         super().__init__()
         self.upsample, self.layers = upsample, layers
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout if input_dropout is None else input_dropout)
         if layers:
             self.project = nn.Linear(width, hidden)
             self.context = nn.TransformerEncoder(
@@ -77,6 +77,27 @@ class Split:
         targets = torch.tensor([phone for row in rows for phone in row["phone_ids"]])
         target_lengths = torch.tensor([len(row["phone_ids"]) for row in rows])
         return features.float(), lengths * upsample, targets, target_lengths
+
+
+def build_head(config: dict, width: int) -> PhoneHead:
+    """Rebuild a head from a saved trainer config (older configs lack newer keys)."""
+    return PhoneHead(width, config["upsample"], config["dropout"], config.get("context_layers", 0),
+                     config.get("hidden", 256), config.get("input_dropout"))
+
+
+def time_mask(features: torch.Tensor, lengths: torch.Tensor, masks: int, width: int,
+              generator: np.random.Generator) -> torch.Tensor:
+    """Zero ``masks`` random spans of up to ``width`` frames per clip (training only)."""
+    if not masks or not width:
+        return features
+    features = features.clone()
+    for slot, length in enumerate(lengths.tolist()):
+        for _ in range(masks):
+            span = int(generator.integers(0, min(width, max(1, length // 5)) + 1))
+            if span:
+                start = int(generator.integers(0, length - span + 1))
+                features[slot, start:start + span] = 0
+    return features
 
 
 def greedy_phones(log_probabilities: torch.Tensor) -> list[int]:
@@ -150,6 +171,10 @@ def main() -> None:
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--context-layers", type=int, default=0,
                         help="transformer layers before the phone projection (0: linear head)")
+    parser.add_argument("--hidden", type=int, default=256, help="context transformer width")
+    parser.add_argument("--input-dropout", type=float, help="dropout on encoder features (default: --dropout)")
+    parser.add_argument("--time-masks", type=int, default=0, help="masked spans per training clip")
+    parser.add_argument("--time-mask-width", type=int, default=10, help="maximum masked span in frames")
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -192,8 +217,7 @@ def main() -> None:
     (args.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     LOGGER.info("Config: %s", config)
 
-    head = PhoneHead(train.features.shape[1], args.upsample, args.dropout,
-                     args.context_layers).to(device)
+    head = build_head(config, train.features.shape[1]).to(device)
     optimizer = torch.optim.AdamW(head.parameters(), lr=args.learning_rate,
                                   weight_decay=args.weight_decay)
     warmup = max(1, args.steps // 20)
@@ -211,6 +235,8 @@ def main() -> None:
                 break
             indices = generator.choice(len(train.rows), args.batch_size, replace=False).tolist()
             features, lengths, targets, target_lengths = train.batch(indices, args.upsample)
+            features = time_mask(features, lengths // args.upsample, args.time_masks,
+                                 args.time_mask_width, generator)
             log_probabilities = head(features, lengths // args.upsample)
             loss = ctc(log_probabilities.transpose(0, 1), targets, lengths, target_lengths)
             optimizer.zero_grad(set_to_none=True)

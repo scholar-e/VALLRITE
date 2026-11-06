@@ -138,6 +138,13 @@ held-out WER from 40.13% to 36.78% (bootstrap 95% interval for the gain
 2.4–4.3 points; weights fitted on test-select). No training. See the
 decoding record's "Using phone probabilities" section.
 
+**Update 2026-11-06 — masked phone head.** Time-masking the frozen encoder
+features while training a wider head lowers held-out beam PER from 27.99% to
+26.43%. Through the posterior pipeline it wins on test-select (36.47% vs
+38.01%) but ties on test-report (36.88% vs 36.78%; interval −1.3 to +1.0).
+Phone gains of about 1.5 points are too small to move WER measurably on 661
+clips; larger phone gains, or a decoder trained to read posteriors, are needed.
+
 ### Phase 4 — project-specific ideas on the stronger base
 
 Timed/probabilistic phone input, VPA, family objectives and audio-teacher

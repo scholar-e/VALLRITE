@@ -21,7 +21,7 @@ RANKER = {"ctc": 0, "ranker": 1, "words": 0, "unknown": 0}
 
 
 def half_records(name: str, args, posteriors, weights) -> list[dict]:
-    first = args.five_best_root / f"{name}-matched-noise/ranked/scores.jsonl"
+    first = Path(args.first_block.format(name=name))
     hypotheses = args.pool_root / name / "phone-hypotheses.jsonl"
     pool = attach(load_clips([first] + [args.pool_root / name / f"decode{i}/ranked/scores.jsonl"
                                         for i in (1, 2, 3)]), hypotheses, posteriors)
@@ -63,8 +63,9 @@ def main() -> None:
                         default=Path("checkpoints/autoavsr-phone-context2-20261102/best.pt"))
     parser.add_argument("--features", type=Path,
                         default=Path("checkpoints/autoavsr-features-20261102/test"))
-    parser.add_argument("--five-best-root", type=Path,
-                        default=Path("checkpoints/phase3-autoavsr-phones-20261102"))
+    parser.add_argument("--first-block",
+                        default="checkpoints/phase3-autoavsr-phones-20261102/{name}-matched-noise/ranked/scores.jsonl",
+                        help="ranker scores of phone paths 1-5; {name} is select or report")
     parser.add_argument("--pool-root", type=Path,
                         default=Path("checkpoints/posterior-rescoring-20261105/phones20"))
     parser.add_argument("--rescoring-metrics", type=Path,

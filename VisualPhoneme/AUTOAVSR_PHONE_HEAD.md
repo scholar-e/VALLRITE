@@ -79,3 +79,28 @@ The remaining budget should go to whichever direction the project wants:
 - **Use Auto-AVSR's word hypotheses directly**, and apply the Llama/Qwen work as
   an N-best reranker or language model over them. This starts at 26.35% WER.
 - **Combine**: feed both word hypotheses and phone posteriors to the decoder.
+
+## Larger and masked heads, 2026-11-06
+
+The phone interface was kept. Same cached frozen features, selection on
+test-select greedy PER, test-report evaluated once per run. New trainer options:
+`--hidden`, `--input-dropout`, and `--time-masks` / `--time-mask-width`, which
+zero random spans of encoder frames during training (each span at most a fifth
+of the clip), aimed at finding 4 (training features are cleaner than test ones).
+
+| Head | Steps (selected) | test-select greedy | test-report greedy | test-report beam | Oracle@5 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Previous: 2 layers × 256 | 10,000 | 29.02% | 28.48% | 27.99% | 25.49% |
+| A: same, longer | 18,000 / 20,000 | 28.74% | 28.41% | 28.14% | 25.65% |
+| B: 4 layers × 512 | 16,000 / 20,000 | 27.80% | 27.38% | 27.38% | 24.74% |
+| **C: B + 2 masks ≤ 10 frames, input dropout 0.3** | 18,000 / 20,000 | **26.90%** | **26.58%** | **26.43%** | **24.03%** |
+| D: B + 4 masks ≤ 15 frames, input dropout 0.4, 30k planned | 8,000 (stopped at 9,437) | 29.88% | — | — | — |
+
+Longer training alone does not help; width helps a little and masking most
+(−1.56 beam PER points over the previous head). D was behind C's curve and was
+stopped early to stay within the session budget; it is incomplete, not a
+negative result. C is the selected head
+(`checkpoints/autoavsr-phone-C-masked-20261106/best.pt`). Single seed.
+
+End-to-end, C's phones did not lower held-out WER; see "Head C through the
+posterior pipeline" in the [decoding record](../CompetitiveWordDecoder/AUTOAVSR_PHONE_DECODING.md).

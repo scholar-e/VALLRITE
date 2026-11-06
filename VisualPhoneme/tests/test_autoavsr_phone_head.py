@@ -23,5 +23,28 @@ class AutoAvsrPhoneHeadTest(unittest.TestCase):
         self.assertEqual(greedy_phones(path), [3, 3, 5])
 
 
+
+class HeadOptionsTest(unittest.TestCase):
+    def test_time_mask_zeroes_spans_inside_each_clip_only(self):
+        import numpy as np
+        from VisualPhoneme.train_autoavsr_phone_head import time_mask
+        features = torch.ones(2, 50, 4)
+        lengths = torch.tensor([50, 20])
+        masked = time_mask(features, lengths, 3, 8, np.random.default_rng(0))
+        self.assertTrue(torch.equal(features, torch.ones(2, 50, 4)))  # input untouched
+        zero_frames = (masked == 0).all(-1)
+        self.assertGreater(int(zero_frames.sum()), 0)
+        self.assertLessEqual(int(zero_frames[1].sum()), 3 * 4)  # span capped at length // 5
+        self.assertTrue(torch.equal(time_mask(features, lengths, 0, 8, np.random.default_rng(0)), features))
+
+    def test_build_head_accepts_old_and_new_configs(self):
+        from VisualPhoneme.train_autoavsr_phone_head import build_head
+        old = build_head({"upsample": 2, "dropout": 0.1, "context_layers": 2}, 768)
+        self.assertEqual(old.project.out_features, 256)
+        new = build_head({"upsample": 2, "dropout": 0.1, "context_layers": 4, "hidden": 512,
+                          "input_dropout": 0.3}, 768)
+        self.assertEqual((new.project.out_features, new.dropout.p, len(new.context.layers)), (512, 0.3, 4))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -152,3 +152,26 @@ seed of the decoder and phone head. Artifacts:
 Fused decoding prompts the decoder with only the top phone path; the remaining
 gap to the oracle suggests the next steps are a decoder trained to read
 posteriors (soft or multi-path input) and better phones.
+
+## Head C through the posterior pipeline, 2026-11-06
+
+The same pipeline (20 paths decoded with the matched-noise adapter, posterior
+rescoring, fused decoding at the previously selected w = 0.1, combination) was
+rerun with the masked phone head C (26.43% beam PER, against 27.99%). All
+weights were refitted on test-select. Artifacts: `checkpoints/posterior-headC-20261106/`.
+
+| System | Old head, select | Old head, report | Head C, select | Head C, report |
+| --- | ---: | ---: | ---: | ---: |
+| Existing ranker, 5 candidates | 40.85% | 40.13% | 38.51% | 38.46% |
+| Posterior rescoring, 20 candidates | 38.45% | 37.46% | 36.81% | 36.63% |
+| Fused decoding, w = 0.1 | 39.45% | 38.09% | 36.99% | 37.00% |
+| Combined | 38.01% | **36.78%** | **36.47%** | 36.88% |
+| Oracle of 20 candidates | 32.55% | 30.78% | 30.50% | 29.16% |
+
+Head C improves every component and wins on test-select, so by the selection
+rule it is the selected pipeline. On test-report its combined result is a tie
+with the old head's: 36.88% vs 36.78%, 152 clips better, 155 worse, paired
+bootstrap 95% interval for the difference −1.3 to +1.0 points. The combination
+rule fitted on test-select did not transfer for head C (20-candidate rescoring
+alone gives 36.63%). The decoder was adapted to the old head's error profile
+(28.5% PER); it was not re-adapted to head C.

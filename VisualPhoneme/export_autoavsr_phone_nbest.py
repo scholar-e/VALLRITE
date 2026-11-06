@@ -10,7 +10,7 @@ from pathlib import Path
 
 import torch
 
-from VisualPhoneme.train_autoavsr_phone_head import PhoneHead, Split, evaluate
+from VisualPhoneme.train_autoavsr_phone_head import Split, build_head, evaluate
 
 
 def main() -> None:
@@ -28,8 +28,7 @@ def main() -> None:
     split = Split(args.features, device)
     start, stop = (int(part) if part else None for part in args.rows.split(":"))
     indices = list(range(len(split.rows)))[start:stop]
-    head = PhoneHead(split.features.shape[1], config["upsample"], config["dropout"],
-                     config.get("context_layers", 0)).to(device)
+    head = build_head(config, split.features.shape[1]).to(device)
     head.load_state_dict(checkpoint["head"])
     metrics = evaluate(head, split, indices, beam=True,
                        hypotheses_path=args.output / "phone-hypotheses.jsonl", top_n=args.top_n)

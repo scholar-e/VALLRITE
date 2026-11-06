@@ -23,7 +23,7 @@ from CompetitiveWordDecoder.train_vallr_clean import edit_distance
 from PhonemeDecoder.evaluate_qwen_direct import words
 from VisualPhoneme.data import PHONE_TO_ID
 from VisualPhoneme.prepare_lrs3 import transcript_phones
-from VisualPhoneme.train_autoavsr_phone_head import PhoneHead, Split
+from VisualPhoneme.train_autoavsr_phone_head import Split, build_head
 
 LOGGER = logging.getLogger(__name__)
 FEATURES = ("ctc", "ranker", "words", "unknown")
@@ -40,8 +40,7 @@ def phone_posteriors(head_path: Path, features: Path) -> dict[str, torch.Tensor]
     checkpoint = torch.load(head_path, map_location="cpu", weights_only=True)
     config = checkpoint["config"]
     split = Split(features, torch.device("cpu"))
-    head = PhoneHead(split.features.shape[1], config["upsample"], config["dropout"],
-                     config.get("context_layers", 0))
+    head = build_head(config, split.features.shape[1])
     head.load_state_dict(checkpoint["head"])
     head.eval()
     output = {}
