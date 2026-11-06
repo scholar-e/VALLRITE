@@ -19,6 +19,7 @@ def main() -> None:
     parser.add_argument("--features", type=Path, required=True, help="cached split directory")
     parser.add_argument("--rows", default=":", help="python slice over split rows, e.g. :660")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--top-n", type=int, default=5, help="phone paths kept per clip")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -31,9 +32,9 @@ def main() -> None:
                      config.get("context_layers", 0)).to(device)
     head.load_state_dict(checkpoint["head"])
     metrics = evaluate(head, split, indices, beam=True,
-                       hypotheses_path=args.output / "phone-hypotheses.jsonl")
+                       hypotheses_path=args.output / "phone-hypotheses.jsonl", top_n=args.top_n)
     metrics.update(head=str(args.head), head_step=checkpoint["step"], features=str(args.features),
-                   rows=args.rows)
+                   rows=args.rows, top_n=args.top_n)
     (args.output / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     print(json.dumps({key: metrics[key] for key in ("clips", "greedy_per", "beam_per",
                                                     "oracle_per_at_5")}))

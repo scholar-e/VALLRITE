@@ -131,6 +131,13 @@ held-out ranked WER from 49.83% to 40.13% (selected on test-select; single
 seed). Domain/format change is confounded with noise; run the clean-only LRS3
 control next. Auto-AVSR words remain ahead at 25.54%.
 
+**Update 2026-11-05 — phone probabilities.** Scoring sentences by the CTC
+likelihood of their pronunciation under the phone posteriors, over a 20-path
+candidate pool, plus posterior-fused beam search of the decoder, reduces
+held-out WER from 40.13% to 36.78% (bootstrap 95% interval for the gain
+2.4–4.3 points; weights fitted on test-select). No training. See the
+decoding record's "Using phone probabilities" section.
+
 ### Phase 4 — project-specific ideas on the stronger base
 
 Timed/probabilistic phone input, VPA, family objectives and audio-teacher

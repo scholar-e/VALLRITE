@@ -97,3 +97,58 @@ Operational note: launched directly from a background shell, the trainer
 stopped at every thermal pause, because the shell saw the guard's SIGSTOP
 (exit 147) and its cleanup ended the trainer. Wrapping the command in
 `timeout`, as the repository scripts do, keeps the pause transparent.
+
+## Using phone probabilities, 2026-11-05
+
+The decoder above sees only hard phone strings. These steps use the phone
+head's frame posteriors directly; the phone interface is unchanged.
+
+1. **Posterior rescoring** (`posterior_rescoring.py`). Each candidate sentence
+   is converted to CMUdict phones (the same lookup as the training labels) and
+   scored by its CTC log-likelihood under the posteriors, log P(phones(W) |
+   video). Score = CTC + weights × (existing ranker score, word count, unknown
+   words), fitted by grid search on test-select.
+2. **Wider pool.** `export_autoavsr_phone_nbest.py --top-n 20` exports 20 phone
+   paths (the first five are identical to the earlier export); paths 6–20 are
+   decoded in blocks of five with the matched-noise adapter.
+3. **Posterior-fused decoding** (`posterior_fused_decoding.py`). Beam search
+   (beam 8, top-8 tokens) of the matched-noise decoder prompted with the top
+   phone path, where each completed word updates a CTC prefix score of the
+   sentence's pronunciation: score = log P_LLM + w · log P_CTC (exact sequence
+   probability at end of sentence). It can produce sentences no phone path
+   spelled out. Key/value cached; about 4 clips per second.
+4. **Combination** (`combine_posterior_systems.py`). Per clip, pick the fused
+   top sentence or the rescored 20-best winner by CTC + word and unknown-word
+   terms with a margin, fitted on test-select.
+
+Weight sweep for fused decoding (first 200 test-select clips; on the same clips
+the top path scores 43.12%, the existing ranker 39.48% and 20-best rescoring
+37.88%):
+
+| CTC weight w | 0 (plain beam) | 0.1 | 0.25 | 0.5 | 1.0 | 2.0 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| WER | 40.96% | **37.94%** | 38.31% | 39.54% | 42.07% | 45.53% |
+
+Higher weights shorten outputs (1,574 → 1,447 hypothesis words against 1,621
+reference words); a per-word bonus did not recover them. w = 0.1 was selected.
+
+| System (matched-noise decoder) | test-select | test-report |
+| --- | ---: | ---: |
+| Existing ranker, 5 candidates (previous selected) | 40.85% | 40.13% |
+| Posterior rescoring, 5 candidates | 40.03% | 38.79% |
+| Posterior rescoring, 20 candidates | 38.45% | 37.46% |
+| Posterior-fused decoding, w = 0.1 (one decode) | 39.45% | 38.09% |
+| **Combined** | 38.01% | **36.78%** |
+| Oracle of 20 candidates (not deployable) | 32.55% | 30.78% |
+| Auto-AVSR words, joint, no LM | — | 25.54% |
+
+Test-report was evaluated once with every weight frozen from test-select. The
+gain over the previous selected system is 3.35 points (163 word errors); a
+10,000-resample paired clip bootstrap gives a 95% interval of 2.4–4.3 points
+with no resample showing no gain. Clips, not speakers, are resampled; single
+seed of the decoder and phone head. Artifacts:
+`checkpoints/posterior-rescoring-20261105/`, `checkpoints/posterior-fused-20261105/`.
+
+Fused decoding prompts the decoder with only the top phone path; the remaining
+gap to the oracle suggests the next steps are a decoder trained to read
+posteriors (soft or multi-path input) and better phones.

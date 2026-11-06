@@ -90,7 +90,7 @@ def greedy_phones(log_probabilities: torch.Tensor) -> list[int]:
 
 @torch.inference_mode()
 def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = False,
-             hypotheses_path: Path | None = None) -> dict:
+             hypotheses_path: Path | None = None, top_n: int = 5) -> dict:
     head.eval()
     totals = {"phones": 0, "substitutions": 0, "deletions": 0, "insertions": 0,
               "predicted_phones": 0, "blank_frames": 0, "emission_steps": 0}
@@ -113,11 +113,11 @@ def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = Fal
             totals["blank_frames"] += int((path.argmax(-1) == 0).sum())
             totals["emission_steps"] += len(path)
             if beam:
-                candidates = ctc_prefix_beam_search(path.double(), beam_width=64, top_n=5,
+                candidates = ctc_prefix_beam_search(path.double(), beam_width=64, top_n=top_n,
                                                     token_top_k=12)
                 errors = [sum(edit_counts(row["phone_ids"], sequence)) for sequence, _ in candidates]
                 beam_edits += errors[0]
-                oracle_edits += min(errors)
+                oracle_edits += min(errors[:5])
                 if handle:
                     handle.write(json.dumps({
                         "clip_id": row["clip_id"],
