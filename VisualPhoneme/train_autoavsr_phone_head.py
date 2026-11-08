@@ -15,6 +15,7 @@ import math
 from pathlib import Path
 import signal
 import time
+import zlib
 
 import numpy as np
 import torch
@@ -100,6 +101,11 @@ def time_mask(features: torch.Tensor, lengths: torch.Tensor, masks: int, width: 
     return features
 
 
+def source_fold(clip_id: str, folds: int) -> int:
+    """Deterministic fold of a clip's source video (``lrs3:split/video/clip``)."""
+    return zlib.crc32(clip_id.split("/")[1].encode()) % folds
+
+
 def greedy_phones(log_probabilities: torch.Tensor) -> list[int]:
     output, previous = [], None
     for index in log_probabilities.argmax(-1).tolist():
@@ -175,6 +181,8 @@ def main() -> None:
     parser.add_argument("--input-dropout", type=float, help="dropout on encoder features (default: --dropout)")
     parser.add_argument("--time-masks", type=int, default=0, help="masked spans per training clip")
     parser.add_argument("--time-mask-width", type=int, default=10, help="maximum masked span in frames")
+    parser.add_argument("--folds", type=int, default=1, help="source-video folds for cross-fitting")
+    parser.add_argument("--held-out-fold", type=int, help="train without this fold's clips")
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -206,10 +214,14 @@ def main() -> None:
     selection, report = list(range(half)), list(range(half, len(test.rows)))
     coverage = {json.loads(line)["clip_id"]: json.loads(line)["pronunciation_coverage"]
                 for line in args.validation_manifest.read_text().splitlines()}
+    trainable = list(range(len(train.rows)))
+    if args.held_out_fold is not None:
+        trainable = [i for i, row in enumerate(train.rows)
+                     if source_fold(row["clip_id"], args.folds) != args.held_out_fold]
     eligible = [i for i, row in enumerate(validation.rows) if coverage[row["clip_id"]] >= 0.95]
     config = {**{key: str(value) if isinstance(value, Path) else value
                  for key, value in vars(args).items()},
-              "train_clips": len(train.rows), "test_select_clips": len(selection),
+              "train_clips": len(trainable), "test_select_clips": len(selection),
               "test_report_clips": len(report),
               "test_split": "official test manifest order: first half selects, second half reports",
               "validation_eligible_clips": len(eligible),
@@ -233,7 +245,8 @@ def main() -> None:
                 LOGGER.warning("Stopped at step %d before the planned %d; run is incomplete",
                                step - 1, args.steps)
                 break
-            indices = generator.choice(len(train.rows), args.batch_size, replace=False).tolist()
+            indices = [trainable[i] for i in
+                       generator.choice(len(trainable), args.batch_size, replace=False).tolist()]
             features, lengths, targets, target_lengths = train.batch(indices, args.upsample)
             features = time_mask(features, lengths // args.upsample, args.time_masks,
                                  args.time_mask_width, generator)

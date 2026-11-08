@@ -145,6 +145,14 @@ features while training a wider head lowers held-out beam PER from 27.99% to
 Phone gains of about 1.5 points are too small to move WER measurably on 661
 clips; larger phone gains, or a decoder trained to read posteriors, are needed.
 
+**Update 2026-11-07 — decoder reading posteriors.** A soft-token posterior
+encoder on the matched-noise decoder, trained on cross-fitted, noise-degraded
+train posteriors, lowers test-select reference loss (1.69 → 1.49 nats/token)
+but not greedy WER. Used as a scorer over a pooled candidate set it gives
+36.39% held-out WER, against 36.59% for the same pipeline without posteriors
+(interval −0.3 to +0.7). Training inputs from encoder-seen clips are the
+limit; see `CompetitiveWordDecoder/POSTERIOR_DECODER.md`.
+
 ### Phase 4 — project-specific ideas on the stronger base
 
 Timed/probabilistic phone input, VPA, family objectives and audio-teacher

@@ -218,7 +218,7 @@ def main() -> None:
                                                  cache_dir=".cache/huggingface/hub",
                                                  local_files_only=True, dtype=torch.float16,
                                                  attn_implementation="sdpa")
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer), mean_resizing=False)  # adapter stores embeddings
     model = PeftModel.from_pretrained(model, args.adapter, local_files_only=True).cuda().eval()
     pronounce = Pronunciations()
     output_path = args.output / "nbest.jsonl"
