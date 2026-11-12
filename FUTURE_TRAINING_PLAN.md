@@ -153,6 +153,13 @@ but not greedy WER. Used as a scorer over a pooled candidate set it gives
 (interval −0.3 to +0.7). Training inputs from encoder-seen clips are the
 limit; see `CompetitiveWordDecoder/POSTERIOR_DECODER.md`.
 
+**Update 2026-11-12 — encoder-unseen data.** Two batches of Meta's Seamless
+Interaction (CC-BY-NC, ~10k usable utterances, 6.3 h, automatic transcripts)
+were prepared; head C reads them at 38% PER. Retraining the posterior encoder
+on these real posteriors, alone or mixed with LRS3, leaves greedy WER worse
+and scorer WER unchanged within noise (36.1–36.5% report). The training-input
+hypothesis is refuted for this route; see `VisualPhoneme/SEAMLESS_DATA.md`.
+
 ### Phase 4 — project-specific ideas on the stronger base
 
 Timed/probabilistic phone input, VPA, family objectives and audio-teacher

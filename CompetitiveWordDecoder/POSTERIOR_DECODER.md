@@ -93,3 +93,12 @@ Operational note: `resize_token_embeddings` defaulted to mean resizing, a
 full-vocabulary covariance on all CPU cores that pushed the CPU to the 95 °C
 thermal kill threshold once. The adapters store their embeddings, so the new
 loaders pass `mean_resizing=False`.
+
+## Update 2026-11-12: real unseen posteriors
+
+Retrained on posteriors from Seamless Interaction clips that Auto-AVSR never
+saw, alone and mixed with the synthetic LRS3 inputs. Greedy WER still rises;
+scorer results are unchanged within noise (35.71-35.89% select, 36.14-36.47%
+report). Details: [Seamless data](../VisualPhoneme/SEAMLESS_DATA.md). The
+training-input explanation above is therefore not sufficient: the approach
+itself, not only its inputs, is at its ceiling here.

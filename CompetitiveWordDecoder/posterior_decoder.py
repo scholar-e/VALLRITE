@@ -206,7 +206,9 @@ def load_model(adapter: Path, trainable: bool):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--train", type=Path, help="exported train-clip posteriors")
+    parser.add_argument("--train", type=Path, nargs="+", help="exported train-clip posteriors (one or more)")
+    parser.add_argument("--train-weights", type=float, nargs="+",
+                        help="sampling weight per --train set (default: proportional to size)")
     parser.add_argument("--test", type=Path, required=True, help="exported test posteriors (head C)")
     parser.add_argument("--adapter", type=Path, required=True,
                         help="initial LoRA adapter, or a saved run's adapter with --evaluate-only")
@@ -253,7 +255,10 @@ def main() -> None:
         LOGGER.info("select WER %.2f%%, report WER %.2f%%", 100 * result["test_select"]["wer"],
                     100 * result["test_report"]["wer"])
         return
-    train = PosteriorSet(args.train)
+    sources = [PosteriorSet(path) for path in args.train]
+    weights = args.train_weights or [len(source.rows) for source in sources]
+    if len(weights) != len(sources):
+        parser.error("--train-weights needs one value per --train set")
     model.config.use_cache = False
     batcher = Batcher(model, tokenizer, encoder)
     lora = [p for p in model.parameters() if p.requires_grad]
@@ -270,14 +275,16 @@ def main() -> None:
     warmup = max(1, args.steps // 20)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min(
         (step + 1) / warmup, 0.5 * (1 + math.cos(math.pi * min(step, args.steps) / args.steps))))
-    config = {**{k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
-              "train_clips": len(train.rows), "test_select_clips": len(selection),
+    config = {**{k: str(v) if isinstance(v, Path) else [str(x) for x in v] if k == "train" else v
+                 for k, v in vars(args).items()},
+              "train_clips": [len(source.rows) for source in sources], "test_select_clips": len(selection),
               "lora_parameters": sum(p.numel() for p in lora),
               "encoder_parameters": sum(p.numel() for p in encoder.parameters())}
     (args.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     LOGGER.info("Config: %s", config)
-    order = list(range(len(train.rows)))
-    random.Random(args.seed).shuffle(order)
+    sampler = random.Random(args.seed)
+    orders = [sampler.sample(range(len(source.rows)), len(source.rows)) for source in sources]
+    positions = [0] * len(sources)
     model.train()
     history, best = [], None
     started = time.monotonic()
@@ -293,8 +300,11 @@ def main() -> None:
                 or time.monotonic() - started > args.max_minutes * 60):
             LOGGER.warning("Stopped at step %d of %d; run is incomplete", step - 1, args.steps)
             break
-        position = ((step - 1) * args.batch_size) % len(order)
-        rows = [train.rows[order[(position + i) % len(order)]] for i in range(args.batch_size)]
+        # One source per batch (rows of a batch share one posterior file); sources drawn by weight.
+        which = sampler.choices(range(len(sources)), weights)[0]
+        train, order = sources[which], orders[which]
+        rows = [train.rows[order[(positions[which] + i) % len(order)]] for i in range(args.batch_size)]
+        positions[which] += args.batch_size
         embeds, mask, labels = batcher.training_batch(train, rows)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             loss = model(inputs_embeds=embeds, attention_mask=mask, labels=labels).loss

@@ -48,3 +48,47 @@ calibrated LRS3 inputs. Expected yield: ~125 utterances per GB, so one batch
 
 Download speed on this machine is ~2-3 MB/s (all servers, not only Hugging
 Face; the parallel `hf download` Xet client stalled), so a batch takes ~4 h.
+
+## Two full batches, 2026-11-12
+
+| Batch | Participant files | Utterances | Hours | Words | Head C greedy PER | Mean max prob (emitted) | Entropy (nats/step) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| naturalistic/train/0000 | 500 | 4,846 | 3.07 | 33,891 | 37.6% | 0.880 | 0.141 |
+| naturalistic/train/0001 | 481 | 5,070 | 3.19 | 35,648 | 38.2% | 0.880 | 0.140 |
+| LRS3 test-select (target) | — | 660 | — | — | 26.9% | 0.903 | 0.130 |
+| LRS3 train, synthetic noise 1.3 | — | 30,757 | — | — | 25.6% | 0.892 | 0.180 |
+
+Main rejections: utterances under three words (~11k) and words with alignment
+score < 0.5 (~11k). Confidence and entropy match test better than the
+synthetic inputs; phone error is higher, partly from automatic-transcript
+label noise. Artifacts (not in git): `datasets/seamless-interaction/prepared/
+batch000{0,1}/{manifest.jsonl,crops,features,posteriors-headC}`.
+
+## Posterior decoder trained on real unseen posteriors
+
+Same recipe as run 2 of the [posterior decoder](../CompetitiveWordDecoder/POSTERIOR_DECODER.md)
+(posterior encoder only, LoRA frozen, lr 1e-3, test-select greedy WER every
+300 steps, patience 4); `posterior_decoder.py --train` now takes several sets
+with `--train-weights` (one source per batch). Scorer: the same pooled
+rescoring (`posterior_decoder_rescoring.py`, final checkpoint, weights fitted
+on test-select). Gain vs control = paired difference on test-report against
+the zeroed-soft-token control (36.59%), 10,000 bootstrap resamples.
+
+| Training posteriors | Best select loss (zeroed 1.686) | Greedy select WER (baseline 40.49%) | Scorer select | Scorer report | Gain vs control, 95% CI |
+| --- | ---: | --- | ---: | ---: | --- |
+| LRS3 synthetic (run 2, 2026-11-07) | 1.487 | 42.6-43.9% | **35.69%** | 36.39% | +0.21 [-0.27, 0.68] |
+| A: Seamless batch 0000 | 1.550 | 42.9-44.1% | 35.71% | 36.47% | +0.12 [-0.39, 0.63] |
+| B: Seamless 0000 + LRS3 synthetic, 1:1 | 1.517 | 43.0-44.4% | 35.89% | 36.14% | +0.45 [0.02, 0.90] |
+| B2: Seamless 0000+0001 + LRS3 synthetic, 1:1 | **1.486** | 43.8-46.9% | 35.85% | 36.41% | not computed |
+
+Real unseen posteriors do not change the picture. Greedy generation still gets
+worse with posteriors (so the earlier failure was not caused by synthetic
+inputs), and as scorers all four encoders are within ~0.2 points on
+test-select. B's report number is the best, but it is the worst of the three
+on test-select and doubling the real data (B2) removes it, so it is treated as
+noise. Text-domain mismatch (conversational Seamless vs TED) likely limits the
+Seamless-only run: its training loss stays near 2.2 against ~1.4 on LRS3.
+
+Conclusion: the soft-token posterior encoder is at its ceiling on this test set
+whatever the training posteriors; more Seamless data for this route is not
+recommended.
