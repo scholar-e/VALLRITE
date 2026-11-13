@@ -161,7 +161,7 @@ def _main(guard_stack):
     model = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION,
                 cache_dir='.cache/huggingface/hub', local_files_only=True,
                 dtype=torch.float16, attn_implementation='sdpa')
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer), mean_resizing=False)  # adapter stores embeddings
     model = PeftModel.from_pretrained(model, args.adapter, local_files_only=True).cuda().eval()
     model.config.use_cache = True
     generated = [[None]*(1 if args.reference_phones or args.visual_top_one else 5) for _ in records]

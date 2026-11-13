@@ -92,3 +92,29 @@ Seamless-only run: its training loss stays near 2.2 against ~1.4 on LRS3.
 Conclusion: the soft-token posterior encoder is at its ceiling on this test set
 whatever the training posteriors; more Seamless data for this route is not
 recommended.
+
+## Phone-string decoder trained on real phone errors, 2026-11-13
+
+`CompetitiveWordDecoder/seamless_decoder_rows.py` appends one row per Seamless
+clip (prompt = head C greedy phone string, ~38% PER; target = transcript) to the
+matched-noise rows: 12,000 + 9,891 = 21,891 rows. Training repeated the
+matched-noise recipe exactly (from `vallr-eos-20261010`, 1 epoch, lr 2e-5,
+batch 4): 5,473 steps, 63 min, `checkpoints/decoder-matched-seamless-20261113`.
+Evaluation reused head C's 20 phone paths (`...-20261113-pipeline`).
+
+| Head C phones, WER | Matched-noise decoder | + Seamless real errors |
+| --- | ---: | ---: |
+| test-select, top-1 of best path | 40.47% | 41.19% |
+| test-select, 5 paths ranked | 38.51% | 38.45% |
+| test-select, 20 paths rescored (fitted) | 36.81% | 36.47% |
+| test-report, 20 paths rescored (select weights) | **36.63%** | 36.78% |
+
+Test-report paired difference: −0.14 points, 95% CI −0.80 to +0.53 (63 clips
+better, 64 worse). Real phone errors from unseen video do not improve the
+decoder on LRS3. The new decoder's top-1 report WER (46.31% vs 41.13%) is
+inflated by one runaway 214-word generation, which rescoring never selects.
+
+Also fixed: `evaluate_llama_visual.py`, `evaluate_probability_ranker.py`,
+`decoder_tolerance.py` and `train_timed_phone_adapter.py` loaded Llama with
+mean resizing, which drove the CPU to 95 °C and a ThermalGuard kill once
+(the adapters store full `embed_tokens`/`lm_head`, so results are unchanged).

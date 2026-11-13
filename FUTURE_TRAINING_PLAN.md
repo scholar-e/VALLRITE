@@ -159,6 +159,9 @@ were prepared; head C reads them at 38% PER. Retraining the posterior encoder
 on these real posteriors, alone or mixed with LRS3, leaves greedy WER worse
 and scorer WER unchanged within noise (36.1–36.5% report). The training-input
 hypothesis is refuted for this route; see `VisualPhoneme/SEAMLESS_DATA.md`.
+Retraining the phone-string decoder with 9.9k real-error Seamless rows added
+(2026-11-13) ties the matched-noise decoder: 36.78% vs 36.63% report, CI −0.8 to
++0.5.
 
 ### Phase 4 — project-specific ideas on the stronger base
 

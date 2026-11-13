@@ -107,7 +107,7 @@ def main():
             tokenizer.padding_side='left'; tokenizer.pad_token=tokenizer.eos_token
             model=AutoModelForCausalLM.from_pretrained(MODEL,revision=REVISION,cache_dir='.cache/huggingface/hub',
                 local_files_only=True,dtype=torch.float16,attn_implementation='sdpa')
-            model.resize_token_embeddings(len(tokenizer))
+            model.resize_token_embeddings(len(tokenizer), mean_resizing=False)  # adapter stores embeddings
             model=PeftModel.from_pretrained(model,adapter,local_files_only=True).cuda().eval()
             model.config.use_cache=True
             reports[name]={'adapter_sha256':hashlib.sha256((Path(adapter)/'adapter_model.safetensors').read_bytes()).hexdigest(),'conditions':{}}

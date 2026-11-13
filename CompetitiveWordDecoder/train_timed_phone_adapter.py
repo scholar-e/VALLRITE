@@ -55,7 +55,7 @@ def main():
     with ThermalGuard(a.output,gpu_required=True):
         tokenizer=AutoTokenizer.from_pretrained(a.adapter,local_files_only=True)
         base=AutoModelForCausalLM.from_pretrained(MODEL,revision=REVISION,cache_dir='.cache/huggingface/hub',local_files_only=True,dtype=torch.bfloat16,attn_implementation='sdpa')
-        base.resize_token_embeddings(len(tokenizer));base=PeftModel.from_pretrained(base,a.adapter,local_files_only=True).cuda().eval()
+        base.resize_token_embeddings(len(tokenizer),mean_resizing=False);base=PeftModel.from_pretrained(base,a.adapter,local_files_only=True).cuda().eval()
         for parameter in base.parameters():parameter.requires_grad_(False)
         base.config.use_cache=False
         residual=TimedPhoneAdapter(base.config.hidden_size).cuda()
