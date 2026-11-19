@@ -27,6 +27,8 @@ def main() -> None:
                         default=Path("checkpoints/pretrained/autoavsr/LRS3_V_WER19.1/model.pth"))
     parser.add_argument("--manifest", action="append", required=True,
                         help="NAME=PATH; repeat for several splits")
+    parser.add_argument("--finetuned", type=Path,
+                        help="finetune_autoavsr_encoder.py checkpoint loaded over --checkpoint")
     parser.add_argument("--data-root", type=Path, default=Path("datasets/lrs3"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--batch-size", type=int, default=32)
@@ -37,9 +39,14 @@ def main() -> None:
                         handlers=[logging.FileHandler(args.output / "cache.log"),
                                   logging.StreamHandler()], force=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = load_autoavsr_ctc(args.checkpoint).to(device).eval()
-    encoder = model.encoder
+    if args.finetuned:
+        from VisualPhoneme.finetune_autoavsr_encoder import load_finetuned_encoder
+        encoder = load_finetuned_encoder(args.finetuned, args.checkpoint).to(device).eval()
+    else:
+        encoder = load_autoavsr_ctc(args.checkpoint).encoder.to(device).eval()
     checkpoint_hash = hashlib.sha256(args.checkpoint.read_bytes()).hexdigest()
+    if args.finetuned:
+        checkpoint_hash += "+" + hashlib.sha256(args.finetuned.read_bytes()).hexdigest()
     with ThermalGuard(args.output, device.type == "cuda"), torch.inference_mode():
         for spec in args.manifest:
             name, path = spec.split("=", 1)
