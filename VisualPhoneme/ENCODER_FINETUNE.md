@@ -78,3 +78,30 @@ and ended at 0.57 (with Seamless mixed in, the smoke run started at 1.3): the
 encoder already fits LRS3 trainval, so it gives almost no learning signal.
 Word-CTC WER drifted up 0.6–0.9 points despite the distillation term. This
 supports training on encoder-unseen clips (R2) rather than LRS3.
+
+## R2: LRS3 + Seamless (batches 0000 and 0001), 1:1
+
+Same settings as R1; sources weighted 2:1:1 (LRS3 : Seamless 0000 : 0001, so
+half the batches are encoder-unseen clips). 8,000 steps, 810 s.
+`checkpoints/encoder-finetune-R2-mixed-20261119/`.
+
+| Step | Test-select greedy PER | Word-CTC WER |
+| ---: | ---: | ---: |
+| 0 | 26.94% | 31.63% |
+| 4,000 (best) | 26.58% | 32.29% |
+| 8,000 | 26.72% | 32.17% |
+
+Training phone CTC fell from 1.24 to 1.02 (mixed batches), so the Seamless
+clips did give a learning signal, but it did not transfer to LRS3 test:
+−0.36 points at the selected step, −0.22 at the end, within the ±0.2
+step-to-step noise. Word-CTC WER again rose ~0.6 points.
+
+## Reading
+
+Neither run moved phone error by more than ~0.3 points; parity with Auto-AVSR's
+words needs ~7. The 18.8%/20.4% word-derived PER is not a CTC number:
+Auto-AVSR's own greedy CTC words give 24.66% PER on test-report, close to head
+C (26.43% beam). The gap comes from the autoregressive attention decoder
+(context over the whole sentence), not from information a CTC head fails to
+read from the encoder. R3 (more blocks) was conditional on a clear gain and is
+not run.
