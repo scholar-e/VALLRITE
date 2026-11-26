@@ -104,3 +104,24 @@ negative result. C is the selected head
 
 End-to-end, C's phones did not lower held-out WER; see "Head C through the
 posterior pipeline" in the [decoding record](../CompetitiveWordDecoder/AUTOAVSR_PHONE_DECODING.md).
+
+## Stress-marked vowels, 2026-11-26
+
+`train_autoavsr_phone_head.py --stress` splits each vowel by CMUdict lexical
+stress (0/1/2): 24 consonants + 15 × 3 vowels = 69 phones. Collapsed, the
+stressed labels equal the cached phone labels on every clip. Head C's exact
+recipe (4 × 512, masks, input dropout 0.3, 20k steps, seed 20261102);
+`checkpoints/autoavsr-phone-C-stress-20261126/`. (English has no lexical
+tone, and pitch is not visible, so only stress was tested.)
+
+| Head | test-select greedy PER, stress ignored | test-report greedy, stress ignored | test-report beam (own classes) |
+| --- | ---: | ---: | ---: |
+| C (39 phones) | **26.90%** | **26.58%** | **26.43%** |
+| C + stress (69 phones) | 27.01% | 26.74% | 27.11% (with stress) |
+
+On test-select vowels whose identity was recognised (5,139), stress is right
+98.1% of the time, against 79.5% for each vowel's most common stress. But a
+text-only lookup on ±2 neighbouring phones (no video) already gets 93.9%:
+stress is mostly implied by the phone sequence (the word), not seen on the
+lips. Extra classes cost ~0.1-0.2 PER points and give the decoder little it
+cannot infer from the phones themselves, so the decoder was not retrained.

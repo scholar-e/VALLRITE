@@ -27,6 +27,23 @@ from VisualPhoneme.thermal import ThermalGuard
 
 LOGGER = logging.getLogger(__name__)
 CLASSES = len(PHONEMES) + 1
+VOWELS = ("AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY", "OW", "OY", "UH", "UW")
+# CMUdict lexical stress on vowels (0 none, 1 primary, 2 secondary); consonants unchanged.
+STRESSED_PHONES = tuple(f"{p}{s}" if p in VOWELS else p for p in PHONEMES
+                        for s in (("0", "1", "2") if p in VOWELS else ("",)))
+
+
+def stressed_targets(rows: list[dict]) -> int:
+    """Replace each row's phone_ids with stressed ids; returns rows whose collapsed ids differ."""
+    from VisualPhoneme.prepare_lrs3 import transcript_phones
+    index = {phone: i + 1 for i, phone in enumerate(STRESSED_PHONES)}
+    mismatches = 0
+    for row in rows:
+        stressed = [index[p] for p in transcript_phones(row["transcript"], keep_stress=True)[0]]
+        collapsed = [PHONEMES.index(STRESSED_PHONES[i - 1].rstrip("012")) + 1 for i in stressed]
+        mismatches += collapsed != row["phone_ids"]
+        row["base_phone_ids"], row["phone_ids"] = row["phone_ids"], stressed
+    return mismatches
 
 
 class PhoneHead(nn.Module):
@@ -37,9 +54,10 @@ class PhoneHead(nn.Module):
     """
 
     def __init__(self, width: int = 768, upsample: int = 2, dropout: float = 0.1,
-                 layers: int = 0, hidden: int = 256, input_dropout: float | None = None):
+                 layers: int = 0, hidden: int = 256, input_dropout: float | None = None,
+                 classes: int = CLASSES):
         super().__init__()
-        self.upsample, self.layers = upsample, layers
+        self.upsample, self.layers, self.classes = upsample, layers, classes
         self.dropout = nn.Dropout(dropout if input_dropout is None else input_dropout)
         if layers:
             self.project = nn.Linear(width, hidden)
@@ -48,7 +66,7 @@ class PhoneHead(nn.Module):
                                            norm_first=True),
                 layers, enable_nested_tensor=False)
             width = hidden
-        self.linear = nn.Linear(width, upsample * CLASSES)
+        self.linear = nn.Linear(width, upsample * classes)
 
     def forward(self, features: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
         """[batch,time,width], frame lengths -> [batch,time*upsample,classes] log probs."""
@@ -58,7 +76,7 @@ class PhoneHead(nn.Module):
                        >= lengths.to(x.device)[:, None])
             x = self.context(self.project(x), src_key_padding_mask=padding)
         logits = self.linear(x)
-        return logits.reshape(features.shape[0], -1, CLASSES).log_softmax(-1)
+        return logits.reshape(features.shape[0], -1, self.classes).log_softmax(-1)
 
 
 class Split:
@@ -83,7 +101,8 @@ class Split:
 def build_head(config: dict, width: int) -> PhoneHead:
     """Rebuild a head from a saved trainer config (older configs lack newer keys)."""
     return PhoneHead(width, config["upsample"], config["dropout"], config.get("context_layers", 0),
-                     config.get("hidden", 256), config.get("input_dropout"))
+                     config.get("hidden", 256), config.get("input_dropout"),
+                     len(STRESSED_PHONES) + 1 if config.get("stress") else CLASSES)
 
 
 def time_mask(features: torch.Tensor, lengths: torch.Tensor, masks: int, width: int,
@@ -117,11 +136,13 @@ def greedy_phones(log_probabilities: torch.Tensor) -> list[int]:
 
 @torch.inference_mode()
 def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = False,
-             hypotheses_path: Path | None = None, top_n: int = 5) -> dict:
+             hypotheses_path: Path | None = None, top_n: int = 5,
+             phones: tuple[str, ...] = PHONEMES) -> dict:
     head.eval()
     totals = {"phones": 0, "substitutions": 0, "deletions": 0, "insertions": 0,
               "predicted_phones": 0, "blank_frames": 0, "emission_steps": 0}
-    beam_edits = oracle_edits = 0
+    beam_edits = oracle_edits = base_edits = 0
+    base_of = [0] + [PHONEMES.index(phone.rstrip("012")) + 1 for phone in phones]
     handle = hypotheses_path.open("w") if hypotheses_path else None
     for start in range(0, len(indices), 64):
         chunk = indices[start:start + 64]
@@ -137,6 +158,8 @@ def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = Fal
             totals["deletions"] += deletions
             totals["insertions"] += insertions
             totals["predicted_phones"] += len(hypothesis)
+            if "base_phone_ids" in row:  # stressed run: also score with stress ignored
+                base_edits += sum(edit_counts(row["base_phone_ids"], [base_of[i] for i in hypothesis]))
             totals["blank_frames"] += int((path.argmax(-1) == 0).sum())
             totals["emission_steps"] += len(path)
             if beam:
@@ -148,10 +171,10 @@ def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = Fal
                 if handle:
                     handle.write(json.dumps({
                         "clip_id": row["clip_id"],
-                        "reference_phones": [PHONEMES[i - 1] for i in row["phone_ids"]],
+                        "reference_phones": [phones[i - 1] for i in row["phone_ids"]],
                         "reference_words": row["transcript"].split(),
                         "phone_hypotheses": [
-                            {"rank": rank, "phones": [PHONEMES[i - 1] for i in sequence],
+                            {"rank": rank, "phones": [phones[i - 1] for i in sequence],
                              "ctc_log_score": score}
                             for rank, (sequence, score) in enumerate(candidates, 1)],
                     }) + "\n")
@@ -161,6 +184,9 @@ def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = Fal
     edits = totals["substitutions"] + totals["deletions"] + totals["insertions"]
     result = {**totals, "clips": len(indices), "greedy_per": edits / totals["phones"],
               "blank_rate": totals["blank_frames"] / totals["emission_steps"]}
+    if phones != PHONEMES:
+        result["unstressed_greedy_per"] = base_edits / sum(
+            len(split.rows[i]["base_phone_ids"]) for i in indices)
     if beam:
         result.update(beam_per=beam_edits / totals["phones"],
                       oracle_per_at_5=oracle_edits / totals["phones"])
@@ -183,6 +209,8 @@ def main() -> None:
     parser.add_argument("--time-mask-width", type=int, default=10, help="maximum masked span in frames")
     parser.add_argument("--folds", type=int, default=1, help="source-video folds for cross-fitting")
     parser.add_argument("--held-out-fold", type=int, help="train without this fold's clips")
+    parser.add_argument("--stress", action="store_true",
+                        help="CMUdict stress-marked vowels as separate classes (69 phones)")
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -210,6 +238,12 @@ def main() -> None:
     train = Split(args.features / "train", device)
     test = Split(args.features / "test", device)
     validation = Split(args.features / "validation", device)
+    phones = PHONEMES
+    if args.stress:
+        phones = STRESSED_PHONES
+        for name, split in (("train", train), ("test", test), ("validation", validation)):
+            LOGGER.info("stress targets %s: %d of %d rows differ from cached phones when collapsed",
+                        name, stressed_targets(split.rows), len(split.rows))
     half = len(test.rows) // 2
     selection, report = list(range(half)), list(range(half, len(test.rows)))
     coverage = {json.loads(line)["clip_id"]: json.loads(line)["pronunciation_coverage"]
@@ -258,19 +292,21 @@ def main() -> None:
             optimizer.step()
             scheduler.step()
             if step % args.eval_every == 0 or step == args.steps:
-                selected = evaluate(head, test, selection)
+                selected = evaluate(head, test, selection, phones=phones)
                 record = {"step": step, "loss": loss.item(), "test_select": selected,
                           "seconds": time.monotonic() - started}
                 history.append(record)
-                LOGGER.info("step %d loss %.3f test-select greedy PER %.2f%% blank %.1f%%",
+                LOGGER.info("step %d loss %.3f test-select greedy PER %.2f%% blank %.1f%%%s",
                             step, loss.item(), 100 * selected["greedy_per"],
-                            100 * selected["blank_rate"])
+                            100 * selected["blank_rate"],
+                            f" unstressed PER {100 * selected['unstressed_greedy_per']:.2f}%"
+                            if "unstressed_greedy_per" in selected else "")
                 if best is None or selected["greedy_per"] < best["test_select"]["greedy_per"]:
                     best = record
                     torch.save({"head": head.state_dict(), "step": step, "config": config,
-                                "phones": PHONEMES}, args.output / "best.pt")
+                                "phones": phones}, args.output / "best.pt")
         torch.save({"head": head.state_dict(), "step": step, "config": config,
-                    "phones": PHONEMES}, args.output / "last.pt")
+                    "phones": phones}, args.output / "last.pt")
         if best is None:
             raise RuntimeError("no evaluation was completed")
         head.load_state_dict(torch.load(args.output / "best.pt", weights_only=True)["head"])
@@ -278,12 +314,12 @@ def main() -> None:
         final = {
             "selected_step": best["step"],
             "steps_completed": step, "steps_planned": args.steps,
-            "test_select": evaluate(head, test, selection),
+            "test_select": evaluate(head, test, selection, phones=phones),
             "test_report": evaluate(head, test, report, beam=True,
-                                    hypotheses_path=args.output / "test-report-phone-hypotheses.jsonl"),
+                                    hypotheses_path=args.output / "test-report-phone-hypotheses.jsonl", phones=phones),
             "validation_eligible_seen_by_encoder": evaluate(
                 head, validation, eligible, beam=True,
-                hypotheses_path=args.output / "validation-phone-hypotheses.jsonl"),
+                hypotheses_path=args.output / "validation-phone-hypotheses.jsonl", phones=phones),
             "history": history,
             "seconds": time.monotonic() - started,
             "finished_utc": datetime.now(timezone.utc).isoformat(),

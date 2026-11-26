@@ -45,14 +45,15 @@ def configure_logging(path: Path) -> None:
     LOGGER.addHandler(console_handler)
 
 
-def transcript_phones(transcript: str) -> tuple[list[str], list[str], float]:
+def transcript_phones(transcript: str, keep_stress: bool = False) -> tuple[list[str], list[str], float]:
     transcript = html.unescape(transcript).replace("’", "'").replace("‘", "'")
     words = [normalize_word(value) for value in re.findall(r"[A-Za-z']+", transcript)]
     phones = []
     unknown = []
     for word in words:
-        pronunciation = [strip_stress(phone) for phone in cmudict_pronunciation(word)]
-        pronunciation = [phone for phone in pronunciation if phone in PHONE_TO_ID]
+        pronunciation = [phone if keep_stress else strip_stress(phone)
+                         for phone in cmudict_pronunciation(word)]
+        pronunciation = [phone for phone in pronunciation if strip_stress(phone) in PHONE_TO_ID]
         if pronunciation:
             phones.extend(pronunciation)
         else:

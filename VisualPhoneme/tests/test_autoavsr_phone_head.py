@@ -48,3 +48,21 @@ class HeadOptionsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StressTest(unittest.TestCase):
+    def test_stressed_targets_collapse_to_cached_phones(self):
+        from VisualPhoneme.data import PHONE_TO_ID
+        from VisualPhoneme.prepare_lrs3 import transcript_phones
+        from VisualPhoneme.train_autoavsr_phone_head import STRESSED_PHONES, stressed_targets
+        self.assertEqual(len(STRESSED_PHONES), 24 + 15 * 3)
+        text = "the present is about humility"
+        row = {"transcript": text, "phone_ids": [PHONE_TO_ID[p] for p in transcript_phones(text)[0]]}
+        self.assertEqual(stressed_targets([row]), 0)
+        self.assertIn("AH0", [STRESSED_PHONES[i - 1] for i in row["phone_ids"]])
+        self.assertEqual(len(row["phone_ids"]), len(row["base_phone_ids"]))
+
+    def test_stress_head_has_69_phones_plus_blank(self):
+        from VisualPhoneme.train_autoavsr_phone_head import build_head
+        head = build_head({"upsample": 2, "dropout": 0.1, "stress": True}, 16)
+        self.assertEqual(head(torch.randn(1, 3, 16), torch.tensor([3])).shape[-1], 70)
