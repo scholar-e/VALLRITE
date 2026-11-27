@@ -199,3 +199,29 @@ worse): the first change since 2026-11-06 to clear noise. The LM weight sits
 at the top of its grid; a wider grid fitted on test-select is untested and
 would need a fresh report evaluation to confirm. Auto-AVSR words remain at
 25.54% on the same clips.
+
+## Anchored LLM corrector and wider LM grid, 2026-11-26
+
+`llm_corrector.py generate`: Qwen3.6-35B-A3B (GGUF Q4_K_M via LM Studio,
+thinking disabled, greedy) sees each clip's top five candidates, ranked by
+the select-fitted rescoring, and writes one sentence. `evaluate`: the
+correction replaces the chosen sentence only when its evidence score (CTC
+fit + LM + word/unknown terms, same weights; no ranker score since the
+decoder never produced it) beats the chosen one by a margin fitted on
+test-select; "never" was allowed. The LM grid was widened to 5.0 in the same
+evaluation. `checkpoints/llm-corrector-20261126/`.
+
+| System | test-select | test-report |
+| --- | ---: | ---: |
+| 20-candidate rescoring + Qwen3.5-9B score (previous) | 35.41% | 35.24% |
+| Same, LM grid widened to 5.0 | 35.41% | 35.24% |
+| **+ anchored corrector (margin 0)** | **35.13%** | **35.01%** |
+
+The wider grid re-selects the same weights (lm 1.0). The corrector replaced
+33 select / 28 report clips; test-report -0.23 points, 95% CI -0.49 to 0.00
+(13 clips better, 5 worse): consistent direction, not clearly beyond noise.
+Qwen3.6 kept the top candidate on 529 clips and picked another shown
+candidate on 521; 271 outputs were new sentences, mostly small repairs
+("how i know we great to ideas" -> "how do we get great ideas"). The prompt
+asked for no punctuation, which stripped apostrophes in 22 outputs ("dont"),
+making them unknown words that the evidence score penalizes.
