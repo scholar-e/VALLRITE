@@ -112,9 +112,11 @@ class PhoneHead(nn.Module):
 
     def __init__(self, width: int = 768, upsample: int = 2, dropout: float = 0.1,
                  layers: int = 0, hidden: int = 256, input_dropout: float | None = None,
-                 classes: int = CLASSES):
+                 classes: int = CLASSES, feature_layers: int = 1):
         super().__init__()
         self.upsample, self.layers, self.classes = upsample, layers, classes
+        # Learned softmax mix over cached encoder layers (input [batch,time,layers,width]).
+        self.layer_logits = nn.Parameter(torch.zeros(feature_layers)) if feature_layers > 1 else None
         self.dropout = nn.Dropout(dropout if input_dropout is None else input_dropout)
         if layers:
             self.project = nn.Linear(width, hidden)
@@ -127,6 +129,8 @@ class PhoneHead(nn.Module):
 
     def forward(self, features: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
         """[batch,time,width], frame lengths -> [batch,time*upsample,classes] log probs."""
+        if self.layer_logits is not None:
+            features = (features * self.layer_logits.softmax(0)[:, None]).sum(2)
         x = self.dropout(features)
         if self.layers:
             padding = (torch.arange(x.shape[1], device=x.device)[None, :]
@@ -147,7 +151,7 @@ class Split:
     def batch(self, indices: list[int], upsample: int):
         rows = [self.rows[index] for index in indices]
         lengths = torch.tensor([row["frames"] for row in rows])
-        features = self.features.new_zeros(len(rows), int(lengths.max()), self.features.shape[1])
+        features = self.features.new_zeros(len(rows), int(lengths.max()), *self.features.shape[1:])
         for slot, row in enumerate(rows):
             features[slot, :row["frames"]] = self.features[row["offset"]:row["offset"] + row["frames"]]
         targets = torch.tensor([phone for row in rows for phone in row["phone_ids"]])
@@ -159,7 +163,8 @@ def build_head(config: dict, width: int) -> PhoneHead:
     """Rebuild a head from a saved trainer config (older configs lack newer keys)."""
     return PhoneHead(width, config["upsample"], config["dropout"], config.get("context_layers", 0),
                      config.get("hidden", 256), config.get("input_dropout"),
-                     config.get("classes") or (len(STRESSED_PHONES) + 1 if config.get("stress") else CLASSES))
+                     config.get("classes") or (len(STRESSED_PHONES) + 1 if config.get("stress") else CLASSES),
+                     config.get("feature_layers", 1))
 
 
 def time_mask(features: torch.Tensor, lengths: torch.Tensor, masks: int, width: int,
@@ -320,6 +325,7 @@ def main() -> None:
     config = {**{key: str(value) if isinstance(value, Path) else value
                  for key, value in vars(args).items()},
               "classes": len(phones) + 1,
+              "feature_layers": train.features.shape[1] if train.features.ndim == 3 else 1,
               "train_clips": len(trainable), "test_select_clips": len(selection),
               "test_report_clips": len(report),
               "test_split": "official test manifest order: first half selects, second half reports",
@@ -328,7 +334,7 @@ def main() -> None:
     (args.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     LOGGER.info("Config: %s", config)
 
-    head = build_head(config, train.features.shape[1]).to(device)
+    head = build_head(config, train.features.shape[-1]).to(device)
     optimizer = torch.optim.AdamW(head.parameters(), lr=args.learning_rate,
                                   weight_decay=args.weight_decay)
     warmup = max(1, args.steps // 20)
@@ -390,6 +396,8 @@ def main() -> None:
             "finished_utc": datetime.now(timezone.utc).isoformat(),
         }
     (args.output / "metrics.json").write_text(json.dumps(final, indent=2) + "\n")
+    if head.layer_logits is not None:
+        LOGGER.info("learned layer weights: %s", [round(w, 3) for w in head.layer_logits.softmax(0).tolist()])
     for name in ("test_select", "test_report", "validation_eligible_seen_by_encoder"):
         result = final[name]
         LOGGER.info("%s: greedy PER %.2f%%%s", name, 100 * result["greedy_per"],

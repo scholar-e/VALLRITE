@@ -75,3 +75,24 @@ and far stronger than any visual model trained in this repository.
   indicate a crop mismatch.
 - Auto-AVSR saw all of trainval and pretrain, so checkpoint selection and final
   evaluation must use disjoint halves of the official test set.
+
+## Test-crop geometry correction, 2026-11-26
+
+`test_crop_correction.py` resamples each third-party test crop (zoom `s` < 1
+zooms out, content moved up `u` px, edge pixels repeated) before the usual
+centre crop, selects on test-select by the published encoder's greedy
+word-CTC WER and scores test-report once. No training.
+`checkpoints/test-crop-correction-20261126/`.
+
+| test-select | u = 0 | u = 2 | u = 4 | u = 8 |
+| --- | ---: | ---: | ---: | ---: |
+| s = 1.00 | 31.75% | 31.63% | 32.19% | 34.39% |
+| s = 0.95 | **31.14%** | 31.35% | 32.07% | 34.13% |
+| s = 0.90 | 31.14% | 31.37% | 32.01% | 33.81% |
+| s = 0.80 | 33.43% | 33.41% | 33.87% | 34.73% |
+
+Chosen s = 0.95, u = 0. Test-report: word-CTC WER 31.72% → 31.17%, head C
+greedy PER 26.58% → 26.33%. The crops are slightly too tight (best zoom
+0.90-0.95) but not shifted, and correcting them is worth ~0.5 points. Crop
+geometry is therefore not the main cause of the 7-point gap to the published
+19.1%; the missing subword language model is the more likely one.

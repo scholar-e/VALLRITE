@@ -97,3 +97,31 @@ class AutoAvsrEncoderTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EncoderLayersTest(unittest.TestCase):
+    def test_selected_layers_end_with_default_output(self):
+        import torch
+        from VisualPhoneme.autoavsr_encoder import AutoAvsrEncoder
+        torch.manual_seed(0)
+        encoder = AutoAvsrEncoder(width=32, heads=4, hidden=64, layers=3, kernel=3).eval()
+        video, lengths = torch.randn(1, 4, 1, 88, 88), torch.tensor([4])
+        with torch.no_grad():
+            stacked = encoder(video, lengths, [2, 3])
+            torch.testing.assert_close(stacked[:, :, -1], encoder(video, lengths))
+        self.assertEqual(tuple(stacked.shape), (1, 4, 2, 32))
+
+
+class CropCorrectionTest(unittest.TestCase):
+    def test_identity_matches_standard_transform_and_up_moves_content_up(self):
+        import torch
+        from VisualPhoneme.autoavsr_encoder import autoavsr_video_transform
+        from VisualPhoneme.test_crop_correction import correct
+        frames = torch.randint(0, 255, (2, 96, 96), dtype=torch.uint8)
+        torch.testing.assert_close(correct(frames, 1.0, 0), autoavsr_video_transform(frames))
+        bar = torch.zeros(1, 96, 96, dtype=torch.uint8)
+        bar[:, 70:74] = 255  # bright rows 70-73 -> 66-69 in the 88 crop
+        row = lambda v: int(v[0, 0].mean(-1).argmax())
+        self.assertEqual(row(correct(bar, 1.0, 0)), 66)
+        self.assertEqual(row(correct(bar, 1.0, 4)), 62)
+        self.assertLess(row(correct(bar, 0.8, 0)), 64)  # zooming out pulls content toward the centre

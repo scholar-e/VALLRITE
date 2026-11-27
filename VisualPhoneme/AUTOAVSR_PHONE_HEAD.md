@@ -167,3 +167,19 @@ within ±0.1 point for b in [-0.25, +0.25]: the head is already at its best
 balance. Phones recovered from deletions arrive mostly as substitutions or
 insertions, i.e. the skipped phones are ones the head cannot identify, not
 ones it is suppressing.
+
+## All-layers head, 2026-11-26
+
+`cache_autoavsr_features.py --layers 3 6 9 12` caches four conformer blocks
+([frames, 4, 768], 16 GB for train; layer 12 equals the usual features
+exactly). The head learns a softmax mix over them (`feature_layers`), then
+follows head C's recipe. `checkpoints/autoavsr-phone-C-layers-20261126/`.
+
+| Head | test-select greedy | test-report greedy | test-report beam |
+| --- | ---: | ---: | ---: |
+| C (block 12) | 26.90% | **26.58%** | **26.43%** |
+| C on blocks 3/6/9/12 | **26.60%** | 26.86% | 26.60% |
+
+A tie. The learned weights are 0.018 / 0.018 / 0.023 / **0.941**: the head
+chooses the final block, so earlier blocks do not hold phone detail the final
+one loses.

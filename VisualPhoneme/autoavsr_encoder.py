@@ -161,16 +161,22 @@ class AutoAvsrEncoder(nn.Module):
         self.after_norm = nn.LayerNorm(width, eps=1e-12)
         self.width = width
 
-    def forward(self, video: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
+    def forward(self, video: torch.Tensor, lengths: torch.Tensor,
+                layers: list[int] | None = None) -> torch.Tensor:
+        """``layers`` (1-based block numbers): return [batch,time,len(layers),768] instead;
+        the last block's output gets the final norm, matching the default output."""
         if video.ndim != 5 or video.shape[2] != 1:
             raise ValueError("video must have shape [batch,time,1,height,width]")
         valid = torch.arange(video.shape[1], device=video.device)[None, :] < lengths[:, None]
         # Zero padded frames so the 3D stem's temporal kernel cannot read them.
         video = video * valid[:, :, None, None, None].to(video.dtype)
         x, positions = self.embed[1](self.embed[0](self.frontend(video)))
-        for layer in self.encoders:
+        kept = []
+        for number, layer in enumerate(self.encoders, 1):
             x = layer(x, positions, valid)
-        return self.after_norm(x)
+            if layers and number in layers:
+                kept.append(self.after_norm(x) if number == len(self.encoders) else x)
+        return torch.stack(kept, dim=2) if layers else self.after_norm(x)
 
 
 class AutoAvsrCtc(nn.Module):

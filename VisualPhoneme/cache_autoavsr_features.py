@@ -29,6 +29,8 @@ def main() -> None:
                         help="NAME=PATH; repeat for several splits")
     parser.add_argument("--finetuned", type=Path,
                         help="finetune_autoavsr_encoder.py checkpoint loaded over --checkpoint")
+    parser.add_argument("--layers", type=int, nargs="+",
+                        help="cache these conformer blocks (1-based) as [frames,layers,768]")
     parser.add_argument("--data-root", type=Path, default=Path("datasets/lrs3"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--batch-size", type=int, default=32)
@@ -56,7 +58,9 @@ def main() -> None:
             destination.mkdir(exist_ok=True)
             total = sum(int(row["frames"]) for row in rows)
             features = np.lib.format.open_memmap(destination / "features.tmp.npy", mode="w+",
-                                                 dtype=np.float16, shape=(total, encoder.width))
+                                                 dtype=np.float16,
+                                                 shape=(total, *([len(args.layers)] if args.layers else []),
+                                                        encoder.width))
             offsets, offset = [], 0
             for row in rows:
                 offsets.append(offset)
@@ -76,7 +80,7 @@ def main() -> None:
                 batch = videos[0].new_zeros(len(videos), int(lengths.max()), *videos[0].shape[1:])
                 for slot, video in enumerate(videos):
                     batch[slot, :len(video)] = video
-                encoded = encoder(batch.to(device), lengths.to(device)).half().cpu().numpy()
+                encoded = encoder(batch.to(device), lengths.to(device), args.layers).half().cpu().numpy()
                 for slot, index in enumerate(indices):
                     features[offsets[index]:offsets[index] + int(lengths[slot])] = \
                         encoded[slot, :int(lengths[slot])]
@@ -93,7 +97,7 @@ def main() -> None:
             (destination / "source.json").write_text(json.dumps({
                 "manifest": str(path), "manifest_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 "checkpoint_sha256": checkpoint_hash, "clips": len(rows), "frames": total,
-                "dtype": "float16", "width": encoder.width,
+                "dtype": "float16", "width": encoder.width, "layers": args.layers,
             }, indent=2) + "\n")
             LOGGER.info("%s: %d clips, %d frames in %.0fs", name, len(rows), total,
                         time.monotonic() - started)

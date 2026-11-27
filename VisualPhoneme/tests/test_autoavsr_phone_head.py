@@ -81,3 +81,16 @@ class PhonePieceTest(unittest.TestCase):
         self.assertEqual(len(units), 42)
         self.assertEqual(piece_targets(rows, units, pairs), 0)  # expands back to the same phones
         self.assertLess(len(rows[0]["phone_ids"]), len(rows[0]["base_phone_ids"]))
+
+
+class LayerMixTest(unittest.TestCase):
+    def test_layer_mix_head_accepts_stacked_layers(self):
+        from VisualPhoneme.train_autoavsr_phone_head import build_head
+        head = build_head({"upsample": 2, "dropout": 0.0, "feature_layers": 3}, 16).eval()
+        stacked = torch.randn(2, 5, 3, 16)
+        out = head(stacked, torch.tensor([5, 4]))
+        self.assertEqual(tuple(out.shape), (2, 10, CLASSES))
+        # equal weights at init: same as feeding the layer mean
+        plain = build_head({"upsample": 2, "dropout": 0.0}, 16).eval()
+        plain.linear.load_state_dict(head.linear.state_dict())
+        torch.testing.assert_close(out, plain(stacked.mean(2), torch.tensor([5, 4])))
