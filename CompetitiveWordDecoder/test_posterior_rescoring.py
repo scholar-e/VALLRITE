@@ -54,3 +54,13 @@ class PosteriorRescoringTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LanguageModelFeatureTest(unittest.TestCase):
+    def test_lm_weight_can_change_the_choice(self):
+        from CompetitiveWordDecoder.posterior_rescoring import select
+        groups = [{"ctc": -1.0, "ranker": 0.0, "words_count": 3, "unknown": 0, "lm": -30.0, "first_index": 0},
+                  {"ctc": -2.0, "ranker": 0.0, "words_count": 3, "unknown": 0, "lm": -10.0, "first_index": 1}]
+        base = {"ctc": 1, "ranker": 0, "words": 0, "unknown": 0}
+        self.assertIs(select(groups, base), groups[0])
+        self.assertIs(select(groups, {**base, "lm": 0.1}), groups[1])

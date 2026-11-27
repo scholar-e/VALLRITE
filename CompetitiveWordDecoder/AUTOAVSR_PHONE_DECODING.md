@@ -175,3 +175,27 @@ bootstrap 95% interval for the difference −1.3 to +1.0 points. The combination
 rule fitted on test-select did not transfer for head C (20-candidate rescoring
 alone gives 36.63%). The decoder was adapted to the old head's error profile
 (28.5% PER); it was not re-adapted to head C.
+
+## General language model as a rescoring feature, 2026-11-26
+
+`lm_sentence_scores.py` scores every distinct candidate sentence of the head C
+20-path pipeline (`posterior-headC-20261106`) with Qwen3.5-9B-Base (bf16,
+summed token log probability after a newline; 85 s on the 5090).
+`posterior_rescoring.py --lm-scores` adds it as an `lm` feature (grid 0-1.0)
+next to the CTC fit, ranker, word count and unknown-word terms; weights are
+refitted on test-select and applied once to test-report.
+`checkpoints/lm-rescoring-20261126/`. A memorization probe found no sign
+that the model recalls LRS3 test sentences ([MEMORIZATION_PROBE.md](MEMORIZATION_PROBE.md)).
+
+| 20-candidate rescoring | test-select | test-report |
+| --- | ---: | ---: |
+| Without LM (previous best) | 36.81% | 36.63% |
+| **With Qwen3.5-9B-Base score** | **35.41%** | **35.24%** |
+| Oracle of the 20 candidates | 30.50% | 29.16% |
+
+Fitted weights: ctc 1, ranker 0.75, words -1, unknown -5, lm 1.0. Test-report
+paired difference -1.40 points, 95% CI -1.95 to -0.86 (76 clips better, 22
+worse): the first change since 2026-11-06 to clear noise. The LM weight sits
+at the top of its grid; a wider grid fitted on test-select is untested and
+would need a fresh report evaluation to confirm. Auto-AVSR words remain at
+25.54% on the same clips.

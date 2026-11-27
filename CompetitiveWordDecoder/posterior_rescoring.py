@@ -3,7 +3,8 @@
 For each candidate sentence, its CMUdict pronunciation (the same lookup that
 produced the training labels) is scored by the CTC forward likelihood under the
 phone head's frame posteriors, i.e. log P(phones(W) | video). This is combined
-with the existing ranker score (phone-path beam score + decoder token log
+with an optional general language-model log probability of the sentence
+(``--lm-scores``, from ``lm_sentence_scores.py``), the existing ranker score (phone-path beam score + decoder token log
 probability, merged over duplicate sentences) and word-count / unknown-word
 terms. Weights are fitted on the test-select half only and applied once to
 test-report.
@@ -63,7 +64,8 @@ def ctc_log_likelihood(log_probabilities: torch.Tensor, phone_ids: list[int]) ->
     return -float(loss)
 
 
-def sentence_groups(candidates: list[dict], log_probabilities: torch.Tensor) -> list[dict]:
+def sentence_groups(candidates: list[dict], log_probabilities: torch.Tensor,
+                    lm_scores: dict | None = None) -> list[dict]:
     """Merge duplicate normalized sentences and attach every scoring feature."""
     groups = {}
     for index, item in enumerate(candidates):
@@ -78,6 +80,7 @@ def sentence_groups(candidates: list[dict], log_probabilities: torch.Tensor) -> 
             "ctc": ctc_log_likelihood(log_probabilities, [PHONE_TO_ID[p] for p in phones]),
             "ranker": logsumexp([value for _, value in entries]),
             "words_count": len(key), "unknown": len(unknown),
+            "lm": lm_scores[" ".join(key)] if lm_scores and key else 0.0,
         })
     return result
 
@@ -85,7 +88,8 @@ def sentence_groups(candidates: list[dict], log_probabilities: torch.Tensor) -> 
 def select(groups: list[dict], weights: dict) -> dict:
     def score(group):
         value = (weights["ctc"] * group["ctc"] + weights["ranker"] * group["ranker"]
-                 + weights["words"] * group["words_count"] + weights["unknown"] * group["unknown"])
+                 + weights["words"] * group["words_count"] + weights["unknown"] * group["unknown"]
+                 + weights.get("lm", 0.0) * group.get("lm", 0.0))
         return value if math.isfinite(value) else -math.inf
     return max(groups, key=lambda group: (score(group), -group["first_index"]))
 
@@ -108,13 +112,13 @@ def load_clips(scores_paths: list[Path], paths_per_file: int = 5) -> dict[str, l
     return by_clip
 
 
-def attach(by_clip: dict, hypotheses: Path, posteriors: dict) -> list[dict]:
+def attach(by_clip: dict, hypotheses: Path, posteriors: dict, lm_scores: dict | None = None) -> list[dict]:
     clips = []
     for line in hypotheses.read_text().splitlines():
         row = json.loads(line)
         candidates = sorted(by_clip[row["clip_id"]], key=lambda item: item["phone_rank"])
         reference = words(" ".join(row["reference_words"]))
-        groups = sentence_groups(candidates, posteriors[row["clip_id"]])
+        groups = sentence_groups(candidates, posteriors[row["clip_id"]], lm_scores)
         for group in groups:  # references enter only after features are fixed
             group["errors"] = edit_distance(reference, group["words"])
         clips.append({"clip_id": row["clip_id"], "reference": reference, "groups": groups,
@@ -127,13 +131,14 @@ GRID = {
     "ranker": (0.0, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0),
     "words": tuple(x / 2 for x in range(-4, 13)),
     "unknown": (-20.0, -10.0, -5.0, -2.0, 0.0),
+    "lm": (0.0, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0),
 }
 
 
-def fit(clips: list[dict]) -> tuple[dict, int]:
+def fit(clips: list[dict], features: tuple[str, ...] = FEATURES) -> tuple[dict, int]:
     best = None
-    for values in itertools.product(*(GRID[name] for name in FEATURES)):
-        weights = dict(zip(FEATURES, values))
+    for values in itertools.product(*(GRID[name] for name in features)):
+        weights = dict(zip(features, values))
         if not weights["ctc"] and not weights["ranker"]:
             continue
         errors = word_errors(clips, weights)
@@ -167,6 +172,7 @@ def main() -> None:
     parser.add_argument("--report-scores", type=Path, nargs="+", required=True,
                         help="ranker scores.jsonl files covering successive blocks of five paths")
     parser.add_argument("--report-hypotheses", type=Path, required=True)
+    parser.add_argument("--lm-scores", type=Path, help="lm_sentence_scores.py output; adds an 'lm' feature")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
@@ -176,12 +182,17 @@ def main() -> None:
                                   logging.StreamHandler()], force=True)
     posteriors = phone_posteriors(args.head, args.features)
     LOGGER.info("Phone posteriors for %d clips", len(posteriors))
-    selection = attach(load_clips(args.select_scores), args.select_hypotheses, posteriors)
-    weights, errors = fit(selection)
+    lm_scores = None
+    if args.lm_scores:
+        lm_scores = {json.loads(line)["text"]: json.loads(line)["lm_logprob"]
+                     for line in args.lm_scores.read_text().splitlines() if line.strip()}
+    features = FEATURES + (("lm",) if lm_scores else ())
+    selection = attach(load_clips(args.select_scores), args.select_hypotheses, posteriors, lm_scores)
+    weights, errors = fit(selection, features)
     LOGGER.info("Fitted on test-select: %s (%d word errors)", weights, errors)
-    report = attach(load_clips(args.report_scores), args.report_hypotheses, posteriors)
+    report = attach(load_clips(args.report_scores), args.report_hypotheses, posteriors, lm_scores)
     result = {
-        "weights": weights, "grid": GRID,
+        "weights": weights, "grid": {name: GRID[name] for name in features},
         "test_select": summary(selection, weights),
         "test_report": summary(report, weights),
         "inputs": {key: str(value) for key, value in vars(args).items()},
