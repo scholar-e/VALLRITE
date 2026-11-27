@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 import json
 import logging
 import math
+from collections import Counter
+import re
 from pathlib import Path
 import signal
 import time
@@ -43,6 +45,61 @@ def stressed_targets(rows: list[dict]) -> int:
         collapsed = [PHONEMES.index(STRESSED_PHONES[i - 1].rstrip("012")) + 1 for i in stressed]
         mismatches += collapsed != row["phone_ids"]
         row["base_phone_ids"], row["phone_ids"] = row["phone_ids"], stressed
+    return mismatches
+
+
+def learn_phone_pieces(rows: list[dict], merges: int) -> tuple[tuple[str, ...], list[tuple[str, str]]]:
+    """Byte-pair merges over each word's phones (pieces never cross words); returns the unit list.
+
+    Units are the 39 phones then one ``A_B`` name per merge; pairs are the merges in order.
+    """
+    from VisualPhoneme.prepare_lrs3 import transcript_phones
+    words = Counter(tuple(transcript_phones(word)[0]) for row in rows
+                    for word in re.findall(r"[A-Za-z']+", row["transcript"]))
+    words = Counter({word: count for word, count in words.items() if word})
+    units, pairs = list(PHONEMES), []
+    for _ in range(merges):
+        counts = Counter()
+        for word, count in words.items():
+            for pair in zip(word, word[1:]):
+                counts[pair] += count
+        if not counts:
+            break
+        (left, right), _ = counts.most_common(1)[0]
+        merged = f"{left}_{right}"
+        units.append(merged)
+        pairs.append((left, right))
+        words = Counter({_merge(word, left, right, merged): count for word, count in words.items()})
+    return tuple(units), pairs
+
+
+def _merge(word: tuple, left: str, right: str, merged: str) -> tuple:
+    out, i = [], 0
+    while i < len(word):
+        if i + 1 < len(word) and word[i] == left and word[i + 1] == right:
+            out.append(merged)
+            i += 2
+        else:
+            out.append(word[i])
+            i += 1
+    return tuple(out)
+
+
+def piece_targets(rows: list[dict], units: tuple[str, ...], pairs: list[tuple[str, str]]) -> int:
+    """Replace phone_ids with phone-piece ids (merges applied per word in learned order)."""
+    from VisualPhoneme.prepare_lrs3 import transcript_phones
+    index = {unit: i + 1 for i, unit in enumerate(units)}
+    mismatches = 0
+    for row in rows:
+        pieces = []
+        for word in re.findall(r"[A-Za-z']+", row["transcript"]):
+            word = tuple(transcript_phones(word)[0])
+            for left, right in pairs:
+                word = _merge(word, left, right, f"{left}_{right}")
+            pieces.extend(index[piece] for piece in word)
+        expanded = [PHONEMES.index(p) + 1 for i in pieces for p in units[i - 1].split("_")]
+        mismatches += expanded != row["phone_ids"]
+        row["base_phone_ids"], row["phone_ids"] = row["phone_ids"], pieces
     return mismatches
 
 
@@ -102,7 +159,7 @@ def build_head(config: dict, width: int) -> PhoneHead:
     """Rebuild a head from a saved trainer config (older configs lack newer keys)."""
     return PhoneHead(width, config["upsample"], config["dropout"], config.get("context_layers", 0),
                      config.get("hidden", 256), config.get("input_dropout"),
-                     len(STRESSED_PHONES) + 1 if config.get("stress") else CLASSES)
+                     config.get("classes") or (len(STRESSED_PHONES) + 1 if config.get("stress") else CLASSES))
 
 
 def time_mask(features: torch.Tensor, lengths: torch.Tensor, masks: int, width: int,
@@ -142,7 +199,7 @@ def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = Fal
     totals = {"phones": 0, "substitutions": 0, "deletions": 0, "insertions": 0,
               "predicted_phones": 0, "blank_frames": 0, "emission_steps": 0}
     beam_edits = oracle_edits = base_edits = 0
-    base_of = [0] + [PHONEMES.index(phone.rstrip("012")) + 1 for phone in phones]
+    expand = [[]] + [[PHONEMES.index(p.rstrip("012")) + 1 for p in unit.split("_")] for unit in phones]
     handle = hypotheses_path.open("w") if hypotheses_path else None
     for start in range(0, len(indices), 64):
         chunk = indices[start:start + 64]
@@ -158,8 +215,8 @@ def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = Fal
             totals["deletions"] += deletions
             totals["insertions"] += insertions
             totals["predicted_phones"] += len(hypothesis)
-            if "base_phone_ids" in row:  # stressed run: also score with stress ignored
-                base_edits += sum(edit_counts(row["base_phone_ids"], [base_of[i] for i in hypothesis]))
+            if "base_phone_ids" in row:  # stress/piece units: also score as plain phones
+                base_edits += sum(edit_counts(row["base_phone_ids"], [b for i in hypothesis for b in expand[i]]))
             totals["blank_frames"] += int((path.argmax(-1) == 0).sum())
             totals["emission_steps"] += len(path)
             if beam:
@@ -185,7 +242,7 @@ def evaluate(head: PhoneHead, split: Split, indices: list[int], beam: bool = Fal
     result = {**totals, "clips": len(indices), "greedy_per": edits / totals["phones"],
               "blank_rate": totals["blank_frames"] / totals["emission_steps"]}
     if phones != PHONEMES:
-        result["unstressed_greedy_per"] = base_edits / sum(
+        result["phone_greedy_per"] = base_edits / sum(
             len(split.rows[i]["base_phone_ids"]) for i in indices)
     if beam:
         result.update(beam_per=beam_edits / totals["phones"],
@@ -211,6 +268,8 @@ def main() -> None:
     parser.add_argument("--held-out-fold", type=int, help="train without this fold's clips")
     parser.add_argument("--stress", action="store_true",
                         help="CMUdict stress-marked vowels as separate classes (69 phones)")
+    parser.add_argument("--phone-pieces", type=int, default=0,
+                        help="learn N within-word phone-piece merges and train on those units")
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -239,7 +298,12 @@ def main() -> None:
     test = Split(args.features / "test", device)
     validation = Split(args.features / "validation", device)
     phones = PHONEMES
-    if args.stress:
+    if args.phone_pieces:
+        phones, pairs = learn_phone_pieces(train.rows, args.phone_pieces)
+        for name, split in (("train", train), ("test", test), ("validation", validation)):
+            LOGGER.info("phone-piece targets %s: %d of %d rows differ from cached phones when expanded",
+                        name, piece_targets(split.rows, phones, pairs), len(split.rows))
+    elif args.stress:
         phones = STRESSED_PHONES
         for name, split in (("train", train), ("test", test), ("validation", validation)):
             LOGGER.info("stress targets %s: %d of %d rows differ from cached phones when collapsed",
@@ -255,6 +319,7 @@ def main() -> None:
     eligible = [i for i, row in enumerate(validation.rows) if coverage[row["clip_id"]] >= 0.95]
     config = {**{key: str(value) if isinstance(value, Path) else value
                  for key, value in vars(args).items()},
+              "classes": len(phones) + 1,
               "train_clips": len(trainable), "test_select_clips": len(selection),
               "test_report_clips": len(report),
               "test_split": "official test manifest order: first half selects, second half reports",
@@ -299,8 +364,8 @@ def main() -> None:
                 LOGGER.info("step %d loss %.3f test-select greedy PER %.2f%% blank %.1f%%%s",
                             step, loss.item(), 100 * selected["greedy_per"],
                             100 * selected["blank_rate"],
-                            f" unstressed PER {100 * selected['unstressed_greedy_per']:.2f}%"
-                            if "unstressed_greedy_per" in selected else "")
+                            f" phone PER {100 * selected['phone_greedy_per']:.2f}%"
+                            if "phone_greedy_per" in selected else "")
                 if best is None or selected["greedy_per"] < best["test_select"]["greedy_per"]:
                     best = record
                     torch.save({"head": head.state_dict(), "step": step, "config": config,

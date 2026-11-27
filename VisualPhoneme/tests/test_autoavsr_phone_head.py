@@ -66,3 +66,18 @@ class StressTest(unittest.TestCase):
         from VisualPhoneme.train_autoavsr_phone_head import build_head
         head = build_head({"upsample": 2, "dropout": 0.1, "stress": True}, 16)
         self.assertEqual(head(torch.randn(1, 3, 16), torch.tensor([3])).shape[-1], 70)
+
+
+class PhonePieceTest(unittest.TestCase):
+    def test_pieces_learn_frequent_chunks_and_expand_back(self):
+        from VisualPhoneme.data import PHONE_TO_ID
+        from VisualPhoneme.prepare_lrs3 import transcript_phones
+        from VisualPhoneme.train_autoavsr_phone_head import learn_phone_pieces, piece_targets
+        texts = ["the cat sat on the mat", "the hat", "about the cat"]
+        rows = [{"transcript": t, "phone_ids": [PHONE_TO_ID[p] for p in transcript_phones(t)[0]]}
+                for t in texts]
+        units, pairs = learn_phone_pieces(rows, 3)
+        self.assertEqual(units[39], "AE_T")  # cat x2, sat, mat, hat: the most frequent pair
+        self.assertEqual(len(units), 42)
+        self.assertEqual(piece_targets(rows, units, pairs), 0)  # expands back to the same phones
+        self.assertLess(len(rows[0]["phone_ids"]), len(rows[0]["base_phone_ids"]))

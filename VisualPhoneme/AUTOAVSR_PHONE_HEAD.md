@@ -125,3 +125,24 @@ text-only lookup on ±2 neighbouring phones (no video) already gets 93.9%:
 stress is mostly implied by the phone sequence (the word), not seen on the
 lips. Extra classes cost ~0.1-0.2 PER points and give the decoder little it
 cannot infer from the phones themselves, so the decoder was not retrained.
+
+## Phone pieces (word-piece method on phones), 2026-11-26
+
+`--phone-pieces N` learns N byte-pair merges over each word's phones (pieces
+never cross words) and trains CTC on the resulting units; outputs expand back
+to phones for scoring. 500 merges give 539 units, about 2.2 phones per unit
+(`AH_N`, `DH_AH`, `IH_NG`, ... `B_EH_T_ER`); expanded targets equal the cached
+phones on every clip. Head C's recipe, 20k steps, 17 min.
+`checkpoints/autoavsr-phone-C-pieces500-20261126/` (hypotheses are in piece
+units).
+
+| Head | test-select greedy phone PER | test-report greedy phone PER |
+| --- | ---: | ---: |
+| C (39 phones) | **26.90%** | **26.58%** |
+| C, 500 phone pieces | 28.52% | 27.50% |
+
+Pieces are 1-1.6 points worse at every evaluation (step 12k: 29.56% vs
+27.47%). Each piece has far fewer training examples than a phone, and the
+blank rate rises to 90% (fewer, longer units per clip). Word pieces help
+Auto-AVSR through its autoregressive decoder and lexicon, not through a
+bigger CTC inventory; a CTC head over pieces does not get that benefit.
