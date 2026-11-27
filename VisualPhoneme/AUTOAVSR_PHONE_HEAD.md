@@ -146,3 +146,24 @@ Pieces are 1-1.6 points worse at every evaluation (step 12k: 29.56% vs
 blank rate rises to 90% (fewer, longer units per clip). Word pieces help
 Auto-AVSR through its autoregressive decoder and lexicon, not through a
 bigger CTC inventory; a CTC head over pieces does not get that benefit.
+
+## Blank penalty for head C, 2026-11-26
+
+Head C deletes ~3.7 phones per insertion, so `blank_penalty_sweep.py`
+subtracts `b` from the blank log probability at decode time (no training).
+`checkpoints/blank-penalty-headC-20261126/`.
+
+| b (test-select) | Greedy PER | Substitutions | Deletions | Insertions |
+| ---: | ---: | ---: | ---: | ---: |
+| -0.50 | 26.96% | 2,468 | 1,868 | 302 |
+| 0 | **26.90%** | 2,648 | 1,557 | 423 |
+| +0.25 | 27.00% | 2,757 | 1,406 | 483 |
+| +1.00 | 27.54% | 2,942 | 1,041 | 756 |
+| +2.00 | 30.03% | 3,165 | 624 | 1,378 |
+
+Beam (width 64) on test-select: 26.72% at b=0, 26.80% at 0.25, 26.96% at 0.5,
+so b=0 is selected and test-report is unchanged (26.43% beam). PER is flat
+within ±0.1 point for b in [-0.25, +0.25]: the head is already at its best
+balance. Phones recovered from deletions arrive mostly as substitutions or
+insertions, i.e. the skipped phones are ones the head cannot identify, not
+ones it is suppressing.
