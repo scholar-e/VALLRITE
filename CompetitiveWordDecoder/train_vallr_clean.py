@@ -14,6 +14,16 @@ import time
 LOG = logging.getLogger(__name__)
 MODEL = "meta-llama/Llama-3.2-3B-Instruct"
 REVISION = "0cb88a4f764b7a12671c53f0838cd831a0843b95"
+# Extra LoRA targets for Qwen3.5's linear-attention layers; absent names are ignored by PEFT.
+LORA_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj",
+                "in_proj_qkv", "in_proj_z", "out_proj"]
+
+
+def adapter_base(adapter) -> tuple[str, str | None, "torch.dtype"]:
+    """Base model, revision and inference dtype for a saved adapter (Llama keeps its fp16 setup)."""
+    import torch
+    name = json.loads((Path(adapter) / "adapter_config.json").read_text())["base_model_name_or_path"]
+    return (MODEL, REVISION, torch.float16) if name == MODEL else (name, None, torch.bfloat16)
 TAGS = ["<S2S>", "<PHONEMES>", "</PHONEMES>", "<TEXT>"]
 WORD = re.compile(r"[A-Za-z']+")
 
@@ -142,6 +152,7 @@ def _main(guard_stack):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--model", default=MODEL, help="base model (default: the VALLR Llama)")
     parser.add_argument("--evaluate-only", action="store_true")
     parser.add_argument("--max-minutes", type=float)
     parser.add_argument("--smoke", action="store_true", help="Separate two-step integration test")
@@ -210,9 +221,11 @@ def _main(guard_stack):
         parser.error('frozen split manifests require visual errors')
     if args.visual_error_mode!='mixed' and not args.visual_errors:
         parser.error('visual error mode requires visual errors')
-    if args.prepared_rows and (not args.end_of_answer or not args.initial_adapter or args.visual_errors
-                               or args.visual_families or args.synthetic_noise):
-        parser.error('prepared rows require EOS, an initial adapter, and no other input mode')
+    # A new base model has no VALLR adapter to continue, so it may start a fresh LoRA on prepared rows.
+    if args.prepared_rows and (not args.end_of_answer or args.visual_errors or args.visual_families
+                               or args.synthetic_noise
+                               or (not args.initial_adapter and args.model == MODEL)):
+        parser.error('prepared rows require EOS, an initial adapter (default model), and no other input mode')
     if args.visual_families or args.visual_errors or args.prepared_rows:
         from VisualPhoneme.thermal import ThermalGuard
         guard_stack.enter_context(ThermalGuard(args.output, gpu_required=True))
@@ -241,7 +254,8 @@ def _main(guard_stack):
         return
     set_seed(42)
     cache = ".cache/huggingface/hub"
-    tokenizer = AutoTokenizer.from_pretrained(MODEL, revision=REVISION, cache_dir=cache)
+    revision = REVISION if args.model == MODEL else None
+    tokenizer = AutoTokenizer.from_pretrained(args.model, revision=revision, cache_dir=cache)
     tokenizer.add_special_tokens({"additional_special_tokens": TAGS})
     tokenizer.pad_token = tokenizer.eos_token
     if args.initial_adapter:
@@ -301,7 +315,7 @@ def _main(guard_stack):
         metadata_path = args.prepared_rows / 'metadata.json'
         prepared_metadata = dict(directory=str(args.prepared_rows),
             metadata=json.loads(metadata_path.read_text()) if metadata_path.exists() else None)
-    manifest = {"model": MODEL, "revision": REVISION, "seed": 42, "smoke": args.smoke,
+    manifest = {"model": args.model, "revision": revision, "seed": 42, "smoke": args.smoke,
                 "upstream_commit": "db932ca83ff8b2b858eb6a4c78d02b5e3805c299",
                 "split_counts": {k: len(v) for k, v in rows.items()}, "duplicates_removed": duplicates,
                 "split_hashes": {k: hashlib.sha256(json.dumps(v).encode()).hexdigest() for k, v in rows.items()},
@@ -404,9 +418,11 @@ def _main(guard_stack):
     if paused():
         LOG.info("Paused before model loading")
         return
-    model = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION, cache_dir=cache,
+    model = AutoModelForCausalLM.from_pretrained(args.model, revision=revision, cache_dir=cache,
                                                dtype=torch.bfloat16 if args.visual_families or args.visual_errors or args.prepared_rows else torch.float16,
                                                attn_implementation="sdpa")
+    if args.model != MODEL:
+        model.cuda()  # mean resizing of a 248k-token vocabulary is far cheaper on the GPU than the CPU
     model.resize_token_embeddings(len(tokenizer))
     if args.evaluate_only:
         model = PeftModel.from_pretrained(model, args.output / "adapter").cuda()
@@ -417,8 +433,8 @@ def _main(guard_stack):
             LOG.info("Loaded initial adapter %s; fresh optimizer unless --resume", args.initial_adapter)
         else:
             model = get_peft_model(model, LoraConfig(task_type="CAUSAL_LM", r=16, lora_alpha=32,
-                                  lora_dropout=.05, bias="none", target_modules=["q_proj", "k_proj",
-                                  "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]))
+                                  lora_dropout=.05, bias="none",
+                                  target_modules=LORA_TARGETS if args.model != MODEL else LORA_TARGETS[:7]))
         model.config.use_cache = False
         model.enable_input_require_grads()
         if args.synthetic_noise and not args.resume:

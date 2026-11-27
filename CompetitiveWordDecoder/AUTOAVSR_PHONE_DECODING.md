@@ -225,3 +225,32 @@ candidate on 521; 271 outputs were new sentences, mostly small repairs
 ("how i know we great to ideas" -> "how do we get great ideas"). The prompt
 asked for no punctuation, which stripped apostrophes in 22 outputs ("dont"),
 making them unknown words that the evidence score penalizes.
+
+## Qwen3.5-9B-Base decoder, 2026-11-26
+
+`train_vallr_clean.py --model Qwen/Qwen3.5-9B-Base` trains a fresh LoRA (rank
+16, attention, linear-attention and MLP projections) in one stage: the 3B's
+three-stage recipe (WikiText, EOS, matched noise) would take over 10 hours at
+9B. Rows: `matched_phone_noise.py` with **head C's** test-select error profile
+(26.7% PER; the 3B decoder was adapted to the older head's 28.5%), 18,000
+noisy + 6,000 clean trainval transcripts, test transcripts excluded
+(`datasets/decoder-training/matched-noise-headC-20261126`). One epoch, lr
+2e-4, batch 4, bf16: 6,000 steps in 3 h 13 min (frequent thermal pauses),
+mean training loss 0.95. The evaluators now read the base model from the
+adapter's config. Same 20 head C paths, same ranker, Qwen3.5-9B-Base
+sentence score, rescoring refitted on test-select, test-report once.
+`checkpoints/decoder-qwen9b-headC-20261126{,-pipeline}/`.
+
+| WER | 3B decoder, select | 3B, report | **9B decoder, select** | **9B, report** |
+| --- | ---: | ---: | ---: | ---: |
+| Top phone path, decoded | 40.47% | 41.13% | 38.35% | 38.32% |
+| Existing ranker, 20 candidates | 37.55% | 38.01% | 35.73% | 35.67% |
+| Rescoring + LM score | 35.41% | 35.24% | **33.79%** | **33.66%** |
+| Oracle of 20 candidates | 30.50% | 29.16% | 28.44% | 27.14% |
+
+Test-report vs the 3B + LM system: -1.58 points, 95% CI -2.45 to -0.72
+(116 clips better, 71 worse). Every stage improves by ~2 points, including
+the oracle, so the 9B writes better candidates, not only better-ranked ones.
+No generation hit the token cap. Two things changed at once (model size and
+head C-matched noise); retraining the 3B on the new rows would separate them.
+Auto-AVSR words: 25.54% on the same clips.

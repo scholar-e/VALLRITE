@@ -9,7 +9,7 @@ import time
 
 from CompetitiveWordDecoder.noisy_teacher import load_nbest
 from CompetitiveWordDecoder.evaluate_vallr_qwen import vallr_prompt
-from CompetitiveWordDecoder.train_vallr_clean import MODEL, REVISION, edit_distance
+from CompetitiveWordDecoder.train_vallr_clean import adapter_base, edit_distance
 from PhonemeDecoder.evaluate_qwen_direct import words
 from CompetitiveWordDecoder.generated_tokens import generation_record
 
@@ -80,6 +80,7 @@ def _main(guard_stack):
     parser.add_argument('--family-format', choices=('codes', 'alternatives'), default='codes')
     parser.add_argument('--max-prompt-tokens', type=int, default=512)
     args = parser.parse_args()
+    base_model, base_revision, base_dtype = adapter_base(args.adapter)
     if args.visual_top_one and args.reference_phones:
         parser.error('choose visual top-one or reference phones, not both')
     if args.max_prompt_tokens < 1 or (args.family_format != 'codes' and not args.visual_families):
@@ -120,7 +121,7 @@ def _main(guard_stack):
     source_metadata = args.hypotheses.parent/'phone-eval.json'
     with (args.adapter/'adapter_model.safetensors').open('rb') as handle:
         adapter_hash = hashlib.file_digest(handle, 'sha256').hexdigest()
-    provenance = {'model': MODEL, 'revision': REVISION, 'adapter': str(args.adapter.resolve()),
+    provenance = {'model': base_model, 'revision': base_revision, 'adapter': str(args.adapter.resolve()),
                   'adapter_sha256': adapter_hash, 'source': str(args.hypotheses.resolve()),
                   'source_sha256': hashlib.sha256(args.hypotheses.read_bytes()).hexdigest(),
                   'records': len(records), 'max_prompt_tokens': max(lengths), 'batch_size': args.batch_size,
@@ -158,9 +159,9 @@ def _main(guard_stack):
         stopping = True
     signal.signal(signal.SIGINT, pause)
     signal.signal(signal.SIGTERM, pause)
-    model = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION,
+    model = AutoModelForCausalLM.from_pretrained(base_model, revision=base_revision,
                 cache_dir='.cache/huggingface/hub', local_files_only=True,
-                dtype=torch.float16, attn_implementation='sdpa')
+                dtype=base_dtype, attn_implementation='sdpa')
     model.resize_token_embeddings(len(tokenizer), mean_resizing=False)  # adapter stores embeddings
     model = PeftModel.from_pretrained(model, args.adapter, local_files_only=True).cuda().eval()
     model.config.use_cache = True

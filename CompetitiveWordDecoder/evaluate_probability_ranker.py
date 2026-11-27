@@ -10,7 +10,7 @@ import time
 
 from CompetitiveWordDecoder.noisy_teacher import load_nbest
 from CompetitiveWordDecoder.evaluate_vallr_qwen import vallr_prompt
-from CompetitiveWordDecoder.train_vallr_clean import MODEL, REVISION, edit_distance
+from CompetitiveWordDecoder.train_vallr_clean import adapter_base, edit_distance
 from PhonemeDecoder.evaluate_qwen_direct import words
 from CompetitiveWordDecoder.generated_tokens import scoring_tokens
 
@@ -90,6 +90,7 @@ def main():
     parser.add_argument('--retokenize-diagnostic', action='store_true',
                         help='reproduce legacy text scoring on the same saved candidates')
     args = parser.parse_args()
+    base_model, base_revision, base_dtype = adapter_base(args.adapter)
     if args.require_exact_tokens and args.retokenize_diagnostic:
         parser.error('exact tokens and legacy diagnostic are mutually exclusive')
     if args.batch_size < 1 or (args.limit is not None and args.limit < 1):
@@ -100,7 +101,7 @@ def main():
         raise ValueError('cached decoder source mismatch')
     if old['adapter_sha256'] != sha(args.adapter/'adapter_model.safetensors'):
         raise ValueError('cached decoder adapter mismatch')
-    if old['model'] != MODEL or old['revision'] != REVISION:
+    if old['model'] != base_model or old['revision'] != base_revision:
         raise ValueError('cached base model mismatch')
     if len(records) != len(old['records_detail']):
         raise ValueError('cached record count mismatch')
@@ -146,7 +147,7 @@ def main():
             if not prefix or not target or len(prefix)+len(target) > 1024:
                 raise ValueError('invalid or oversized scoring sequence; no truncation')
             items.append((i,j,prefix,target))
-    manifest = dict(model=MODEL, revision=REVISION, adapter_sha256=old['adapter_sha256'],
+    manifest = dict(model=base_model, revision=base_revision, adapter_sha256=old['adapter_sha256'],
         source_sha256=old['source_sha256'], decoder_report_sha256=sha(args.decoder_report),
         source=str(args.hypotheses.resolve()), decoder_report=str(args.decoder_report.resolve()),
         records=len(records), limit=args.limit, score_weight=1.0,
@@ -162,9 +163,9 @@ def main():
     (args.output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     started = time.monotonic()
     with ThermalGuard(args.output, gpu_required=True):
-        model = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION,
+        model = AutoModelForCausalLM.from_pretrained(base_model, revision=base_revision,
             cache_dir='.cache/huggingface/hub', local_files_only=True,
-            dtype=torch.float16, attn_implementation='sdpa')
+            dtype=base_dtype, attn_implementation='sdpa')
         model.resize_token_embeddings(len(tokenizer), mean_resizing=False)  # adapter stores embeddings
         model = PeftModel.from_pretrained(model, args.adapter, local_files_only=True).cuda().eval()
         model.config.use_cache = False
