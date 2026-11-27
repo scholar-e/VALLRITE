@@ -35,8 +35,10 @@ user asks for background-only execution or a genuine blocker requires input.
 Use the short-wait skill and its script for detached jobs:
 `bash /home/elinzi/.codex/skills/short-wait/scripts/wait.sh --seconds 55 --file PATH`.
 Choose the run's completion marker or process/log trigger; use built-in blocking
-waits for existing exec sessions. Size each wait to the job (the script allows up
-to 300 seconds): about 2 minutes for runs of tens of minutes, longer for longer
-runs, rather than many 55-second polls. Give concise progress updates. Inspect final logs and metrics before reporting
+waits for existing exec sessions. Agents that can run a command in the background
+and be notified when it exits (Claude Code) should do so for jobs longer than a few
+minutes: run the wait loop itself in the background so the finish reports back,
+instead of polling. Otherwise size each wait to the job (the script allows up to
+300 seconds) rather than many 55-second polls. Give concise progress updates. Inspect final logs and metrics before reporting
 success. A stopped process or expired training cap is not proof of completion.
 Do not start additional experiments without authorization.
