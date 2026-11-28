@@ -272,3 +272,21 @@ min; training loss stayed in epoch 1's range (~0.85). Same pipeline.
 Test-report vs epoch 1: -0.02 points, 95% CI -0.64 to +0.60 (59 clips
 better, 65 worse); test-select is 0.48 worse. A tie: more decoder epochs on
 the same kind of noise don't help. Epoch 1 stays the reference system.
+
+## How many phone paths, 2026-11-28
+
+Oracle phone error rate (best of the first N beam paths against the
+reference phones), head C, test-select, from `VisualPhoneme/phone_path_curve.py`.
+The exports use beam width 64 with the top 12 phones per frame.
+
+| Paths | 1 | 5 | 10 | 20 | 30 | 40 | 50 | 64 | 100 | 128 | 200 | 256 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Beam 64 | 26.72 | 24.37 | 23.39 | 22.64 | 22.15 | 21.78 | 21.57 | 21.37 | | | | |
+| Beam 256 | 26.71 | 24.38 | 23.39 | 22.62 | 22.08 | 21.75 | 21.48 | 21.28 | 20.81 | 20.53 | 20.14 | 19.96 |
+
+Widening the beam barely changes the first 64 paths. The gain per path decays
+roughly logarithmically: 5 -> 20 paths is -1.73 PER (worth ~1.8 WER after
+rescoring), 20 -> 50 is -1.1, 50 -> 256 another -1.5. No knee; the useful
+count is set by decoder cost (~1.2 min per 5 paths per half on the 9B) and by
+whether rescoring can pick the extra candidates. `tools/run-paths50-lm35b`
+measures that for 20/30/40/50 paths.
