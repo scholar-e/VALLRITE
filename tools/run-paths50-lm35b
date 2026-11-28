@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# More phone paths (20 -> 50) and a bigger sentence scorer (Qwen3.5-9B-Base -> LM Studio's Qwen3.6-35B-A3B GGUF)
+# on top of the 9B epoch-1 decoder. Reuses its decodes of paths 1-20; decodes paths 21-50 (~45 min), scores every
+# sentence with both LMs (~25 min), then fits rescoring on test-select for N = 20/30/40/50 paths x {9B, 35B} LM.
+# Only the configuration that wins on test-select is scored on test-report (vs 33.66%).
+# Resumable: finished steps are skipped. Stop between steps with: touch $OUT/PAUSE
+set -euo pipefail
+cd /home/elinzi/Coding/VALLRITE
+PY=.venv-qwen/bin/python
+HEAD=checkpoints/autoavsr-phone-C-masked-20261106/best.pt
+FEATURES=checkpoints/autoavsr-features-20261102/test
+ADAPTER=checkpoints/decoder-qwen9b-headC-20261126/adapter
+OLD=checkpoints/decoder-qwen9b-headC-20261126-pipeline
+OUT=checkpoints/paths50-lm35b-20261128
+GGUF=/home/elinzi/.lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
+LLAMA=/home/elinzi/.lmstudio/extensions/backends/llama.cpp-linux-x86_64-nvidia-cuda12-avx2-2.83.0
+PORT=8091
+check_pause() { if test -e "$OUT/PAUSE"; then echo "paused"; exit 0; fi; }
+mkdir -p "$OUT"
+
+# 1. 50 phone paths per clip; paths 1-20 must match the ones the old decodes saw.
+for half in select report; do
+  rows=$([ $half = select ] && echo ":660" || echo "660:")
+  if ! test -f "$OUT/$half/chunk9.jsonl"; then
+    tools/with-vpa-gpu .venv-vpa-gpu/bin/python -m VisualPhoneme.export_autoavsr_phone_nbest --head $HEAD \
+      --features $FEATURES --rows "$rows" --top-n 50 --output "$OUT/$half"
+    $PY - "$OUT/$half" "checkpoints/posterior-headC-20261106/phones20/$half/phone-hypotheses.jsonl" <<'PY'
+import json, sys
+from pathlib import Path
+out, old = Path(sys.argv[1]), Path(sys.argv[2])
+rows = [json.loads(line) for line in (out / "phone-hypotheses.jsonl").open()]
+previous = {r["clip_id"]: [h["phones"] for h in r["phone_hypotheses"]] for r in map(json.loads, old.open())}
+for row in rows:
+    assert [h["phones"] for h in row["phone_hypotheses"][:20]] == previous[row["clip_id"]], row["clip_id"]
+for k in range(10):
+    with (out / f"chunk{k}.jsonl").open("w") as handle:
+        for row in rows:
+            part = [dict(h, rank=i, source_rank=h["rank"]) for i, h in enumerate(row["phone_hypotheses"][5 * k:5 * k + 5], 1)]
+            handle.write(json.dumps(dict(row, phone_hypotheses=part)) + "\n")
+print(out, "paths 1-20 identical to the old export; wrote chunk0-9")
+PY
+  fi
+done
+
+# 2. Decode + rank paths 21-50 with the 9B epoch-1 adapter; link the old decodes of paths 1-20.
+for half in select report; do
+  for k in 0 1 2 3; do
+    test -e "$OUT/$half/decode$k" || ln -s "$PWD/$OLD/phones20/$half/decode$k" "$OUT/$half/decode$k"
+  done
+  for k in 4 5 6 7 8 9; do
+    D=$OUT/$half/decode$k; mkdir -p "$D"; check_pause
+    test -f "$D/visual/metrics.json" || timeout --signal=TERM --kill-after=60s 5400 tools/with-vpa-gpu $PY \
+      -m CompetitiveWordDecoder.evaluate_llama_visual --hypotheses "$OUT/$half/chunk$k.jsonl" --adapter $ADAPTER \
+      --output "$D/visual" > "$D/visual.log" 2>&1
+    test -f "$D/ranked/scores.jsonl" || timeout --signal=TERM --kill-after=60s 3600 tools/with-vpa-gpu $PY \
+      -m CompetitiveWordDecoder.evaluate_probability_ranker --hypotheses "$OUT/$half/chunk$k.jsonl" \
+      --decoder-report "$D/visual/metrics.json" --adapter $ADAPTER --output "$D/ranked" > "$D/ranked.log" 2>&1
+  done
+done
+scores() { echo "$OUT"/$1/decode{0..9}/ranked/scores.jsonl; }
+ALL="$(scores select) $(scores report)"
+
+# 3. Sentence scores: 9B (Hugging Face) and 35B (GGUF through LM Studio's bundled llama-server).
+check_pause
+test -f "$OUT/lm9b.jsonl" || timeout --signal=TERM --kill-after=30s 3600 tools/with-vpa-gpu $PY \
+  -m CompetitiveWordDecoder.lm_sentence_scores --scores $ALL --output "$OUT/lm9b.jsonl" > "$OUT/lm9b.log" 2>&1
+if ! test -f "$OUT/lm35b.jsonl"; then
+  check_pause
+  LD_LIBRARY_PATH=$LLAMA:$LLAMA/../vendor/linux-llama-cuda12-vendor-v1 timeout 7200 $LLAMA/llama-server -m $GGUF \
+    -ngl 99 -c 8192 -np 4 --port $PORT > "$OUT/llama-server.log" 2>&1 &
+  server=$!
+  trap 'kill $server 2>/dev/null || true' EXIT
+  until grep -q "listening on" "$OUT/llama-server.log"; do kill -0 $server || { tail -5 "$OUT/llama-server.log"; exit 1; }; sleep 2; done
+  timeout --signal=TERM --kill-after=30s 5400 tools/with-vpa-gpu $PY -m CompetitiveWordDecoder.lm_sentence_scores \
+    --scores $ALL --server http://127.0.0.1:$PORT --workers 4 --output "$OUT/lm35b.jsonl" > "$OUT/lm35b.log" 2>&1
+  kill $server; wait $server 2>/dev/null || true; trap - EXIT
+fi
+
+# 4. Rescoring fitted on test-select for each path count and scorer.
+for n in 20 30 40 50; do
+  chunks=$((n / 5 - 1))
+  for lm in 9b 35b; do
+    R=$OUT/rescored-n$n-$lm
+    test -f "$R/metrics.json" || timeout 3600 $PY -m CompetitiveWordDecoder.posterior_rescoring --head $HEAD \
+      --features $FEATURES --select-scores $(eval echo "$OUT"/select/decode{0..$chunks}/ranked/scores.jsonl) \
+      --select-hypotheses "$OUT/select/phone-hypotheses.jsonl" \
+      --report-scores $(eval echo "$OUT"/report/decode{0..$chunks}/ranked/scores.jsonl) \
+      --report-hypotheses "$OUT/report/phone-hypotheses.jsonl" --lm-scores "$OUT/lm$lm.jsonl" \
+      --output "$R" > "$R.stdout" 2>&1
+  done
+done
+
+# 5. Pick on test-select; only the winner's test-report result is printed and compared with 33.66%.
+$PY - "$OUT" "$OLD/rescored/test-report-selected.jsonl" <<'PY'
+import json, random, sys
+from pathlib import Path
+from CompetitiveWordDecoder.train_vallr_clean import edit_distance
+out = Path(sys.argv[1])
+runs = sorted(out.glob("rescored-n*"), key=lambda p: (int(p.name.split("-")[1][1:]), p.name))
+select = {}
+for run in runs:
+    if (run / "metrics.json").exists():
+        m = json.loads((run / "metrics.json").read_text())["test_select"]
+        select[run] = m["fitted"]["wer"]
+        print(f"{run.name}: test-select {100 * m['fitted']['wer']:.2f}%  oracle {100 * m['oracle']['wer']:.2f}%")
+best = min(select, key=select.get)
+report = json.loads((best / "metrics.json").read_text())["test_report"]
+print(f"selected on test-select: {best.name}; test-report {100 * report['fitted']['wer']:.2f}%")
+load = lambda p: {r["clip_id"]: r for r in map(json.loads, open(p))}
+old, new = load(sys.argv[2]), load(best / "test-report-selected.jsonl")
+d, n = [], 0
+for i in sorted(old):
+    ref = new[i]["reference"].split(); n += len(ref)
+    d.append(edit_distance(ref, new[i]["text"].split()) - edit_distance(ref, old[i]["text"].split()))
+rng = random.Random(0); b = sorted(sum(d[rng.randrange(len(d))] for _ in d) / n for _ in range(10000))
+summary = {"selected": best.name, "test_select": {r.name: v for r, v in select.items()},
+           "test_report": report["fitted"]["wer"], "vs_33.66": 100 * sum(d) / n,
+           "ci95": [100 * b[250], 100 * b[9750]], "better": sum(x < 0 for x in d), "worse": sum(x > 0 for x in d)}
+(out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+print(f"vs 9B epoch 1 (33.66%): {summary['vs_33.66']:+.2f} pts, 95% CI [{b[250]*100:+.2f}, {b[9750]*100:+.2f}], "
+      f"better {summary['better']}, worse {summary['worse']}")
+PY
