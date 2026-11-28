@@ -254,3 +254,21 @@ the oracle, so the 9B writes better candidates, not only better-ranked ones.
 No generation hit the token cap. Two things changed at once (model size and
 head C-matched noise); retraining the 3B on the new rows would separate them.
 Auto-AVSR words: 25.54% on the same clips.
+
+## Second 9B epoch, 2026-11-27
+
+Continued the 9B adapter for one more epoch on freshly noised rows (head C
+matched noise, seed 2, `...-seed2-20261127`), lr 1e-4, 6,000 steps in 3 h 18
+min; training loss stayed in epoch 1's range (~0.85). Same pipeline.
+`checkpoints/decoder-qwen9b-headC-ep2-20261127{,-pipeline}/`.
+
+| WER | Epoch 1, select | Epoch 1, report | Epoch 2, select | Epoch 2, report |
+| --- | ---: | ---: | ---: | ---: |
+| Top phone path, decoded | 38.35% | 38.32% | 38.19% | 38.03% |
+| Existing ranker, 20 candidates | 35.73% | 35.67% | 35.75% | 35.38% |
+| Rescoring + LM score | 33.79% | 33.66% | 34.27% | 33.63% |
+| Oracle of 20 candidates | 28.44% | 27.14% | 28.30% | 27.10% |
+
+Test-report vs epoch 1: -0.02 points, 95% CI -0.64 to +0.60 (59 clips
+better, 65 worse); test-select is 0.48 worse. A tie: more decoder epochs on
+the same kind of noise don't help. Epoch 1 stays the reference system.
