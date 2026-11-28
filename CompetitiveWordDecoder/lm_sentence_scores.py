@@ -3,12 +3,15 @@
 Collects every distinct normalized sentence from ranker ``scores.jsonl`` files
 and writes ``{"text", "lm_logprob", "tokens"}`` rows: the summed token log
 probability of the lowercase sentence after a newline, under a causal LM read
-from the local Hugging Face cache. References are never read.
+from the local Hugging Face cache, or from a llama.cpp server (``--server``,
+e.g. LM Studio's bundled llama-server on a GGUF). References are never read.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
 from pathlib import Path
+import urllib.request
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -39,10 +42,33 @@ def sentence_log_probs(model, tokenizer, sentences: list[str], batch_size: int) 
     return results
 
 
+def _post(url: str, body: dict) -> dict:
+    request = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=300) as response:
+        return json.loads(response.read())
+
+
+def server_log_probs(url: str, sentences: list[str], workers: int = 4, post=_post) -> list[tuple[float, int]]:
+    """Same quantity from llama-server, which returns no prompt log-probs: a token-ID grammar forces
+    generation of the sentence's own tokens, and n_probs reports each one's pre-sampling log-prob."""
+    def one(text: str) -> tuple[float, int]:
+        ids = post(f"{url}/tokenize", {"content": text})["tokens"]
+        out = post(f"{url}/completion", {
+            "prompt": "\n", "grammar": "root ::= " + " ".join(f"<[{i}]>" for i in ids), "n_predict": len(ids),
+            "temperature": 0, "n_probs": 1, "post_sampling_probs": False, "cache_prompt": True})
+        probs = out["completion_probabilities"]
+        assert len(probs) == len(ids), (text, len(probs), len(ids))
+        return sum(p["logprob"] for p in probs), len(ids)
+    with ThreadPoolExecutor(workers) as pool:
+        return list(pool.map(one, sentences))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scores", type=Path, nargs="+", required=True)
     parser.add_argument("--model", default="Qwen/Qwen3.5-9B-Base")
+    parser.add_argument("--server", help="llama-server base URL (e.g. http://127.0.0.1:8091); --model is then ignored")
+    parser.add_argument("--workers", type=int, default=4, help="--server: concurrent requests (match -np)")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -53,12 +79,16 @@ def main() -> None:
                         for line in path.read_text().splitlines() if line.strip()})
     sentences = [s for s in sentences if s]
     LOGGER.info("%d distinct sentences", len(sentences))
-    tokenizer = AutoTokenizer.from_pretrained(args.model, cache_dir=".cache/huggingface/hub", local_files_only=True)
-    model = AutoModelForCausalLM.from_pretrained(args.model, cache_dir=".cache/huggingface/hub",
-                                                 local_files_only=True, dtype=torch.bfloat16).to("cuda").eval()
     order = sorted(range(len(sentences)), key=lambda i: len(sentences[i]))  # similar lengths per batch
-    with ThermalGuard(args.output.parent, True):
-        scored = sentence_log_probs(model, tokenizer, [sentences[i] for i in order], args.batch_size)
+    if args.server:
+        with ThermalGuard(args.output.parent, True):
+            scored = server_log_probs(args.server, [sentences[i] for i in order], args.workers)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.model, cache_dir=".cache/huggingface/hub", local_files_only=True)
+        model = AutoModelForCausalLM.from_pretrained(args.model, cache_dir=".cache/huggingface/hub",
+                                                     local_files_only=True, dtype=torch.bfloat16).to("cuda").eval()
+        with ThermalGuard(args.output.parent, True):
+            scored = sentence_log_probs(model, tokenizer, [sentences[i] for i in order], args.batch_size)
     with args.output.open("w") as handle:
         for index, (logprob, count) in zip(order, scored):
             handle.write(json.dumps({"text": sentences[index], "lm_logprob": logprob, "tokens": count}) + "\n")
